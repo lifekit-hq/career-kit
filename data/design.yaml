@@ -18,6 +18,18 @@ typography:
     headline: Roboto
     connections: Roboto
     section_titles: Roboto
+  # sb2nov defaults the headline (the position/title line) to non-bold, which
+  # reads thin next to the bold name. Bold it so the subtitle matches the name.
+  bold:
+    name: true
+    headline: true
+    connections: false
+    section_titles: true
+header:
+  connections:
+    # Default is 'national', which drops the country code (Irish +353… -> 085…).
+    # 'international' keeps the +353 country code in the rendered header.
+    phone_number_format: international
 sections:
   space_between_regular_entries: 0.6em
   space_between_text_based_entries: 0.2em

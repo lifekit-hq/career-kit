@@ -31,7 +31,7 @@ data/                       PRIVATE (gitignored) — your real content
   variants/<role>.yml       the framing (select/order/prose overrides)
   design.yaml               shared RenderCV look (sb2nov + Roboto, 1 page)
 bin/cv                      build / ats / match driver
-skills/tailor-cv/           the /tailor-cv orchestration skill
+.claude/skills/tailor-cv/   the /tailor-cv orchestration skill (project-scoped)
 examples/profile.example.yml  the schema, with fake data
 build/<variant>/            generated RenderCV output (gitignored)
 ```

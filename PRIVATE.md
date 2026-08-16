@@ -11,7 +11,7 @@ the **content** is not. This file is the contract (mirrors lifekit-stack).
 - `build/` — rendered `.tex`/`.pdf` carry the same content as the data.
 
 ## Safe to commit (the tool)
-- `generate.py`, `templates/`, `bin/`, `skills/`, `examples/`, docs.
+- `generate.py`, `templates/`, `bin/`, `.claude/skills/`, `examples/`, docs.
 - `examples/profile.example.yml` — **fabricated** data showing the schema only.
 
 Enforced by `.gitignore`. If this ever goes public, add a gitleaks pre-commit

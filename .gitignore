@@ -2,7 +2,8 @@
 # The tool (code) is public-able; the data is not. See PRIVATE.md.
 /data/profile.yml
 /data/variants/*.yml
-!/data/variants/baseline.yml   # baseline is empty (defaults only) — safe, kept as the fidelity anchor
+# baseline is empty (defaults only) — safe, kept as the fidelity anchor
+!/data/variants/baseline.yml
 
 # Build artifacts
 /build/

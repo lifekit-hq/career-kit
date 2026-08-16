@@ -1,0 +1,4 @@
+# baseline — the canonical general CV. Uses profile.yml as-is.
+# This is the version Denys approved; it is the fidelity target for the
+# generator (regenerating it must match ~/projects/cv/main.tex).
+# An empty variant = pure profile defaults. Nothing to override here.

@@ -1,0 +1,13 @@
+# Private data — real CV content and personal facts NEVER get committed.
+# The tool (code) is public-able; the data is not. See PRIVATE.md.
+/data/profile.yml
+/data/variants/*.yml
+!/data/variants/baseline.yml   # baseline is empty (defaults only) — safe, kept as the fidelity anchor
+
+# Build artifacts
+/build/
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/

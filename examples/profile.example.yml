@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────────────────
+# EXAMPLE profile — fabricated data showing the schema. Copy to
+# ../data/profile.yml and fill with your own facts (that file is gitignored).
+# ─────────────────────────────────────────────────────────────────────────
+name: Ada Lovelace
+headline: Senior Software Engineer | Backend & Platform
+
+contacts:
+  - href: mailto:ada@example.com
+    label: ada@example.com
+  - href: https://linkedin.com/in/example
+    label: linkedin.com/in/example
+  - href: https://github.com/example
+    label: github.com/example
+
+# Default section order. Variants may override; known sections:
+# profile | experience | projects | skills | education | languages
+sections: [profile, experience, skills, education, languages]
+
+summary: >-
+  Engineer with N years building reliable services. One or two sentences on
+  strengths — kept in profile.yml as the default; variants override per role.
+
+# Keyed roles. who/where/when lives here (the scaffold). Variants select order
+# via experience_order and patch bullets via experience_overrides[<key>].
+experience:
+  - key: acme
+    title: Senior Software Engineer
+    company: Acme Corp
+    location: Remote
+    start: Jan. 2023
+    end: Present
+    bullets:
+      - Did a concrete thing that had a measurable outcome.
+      - Owned a system; describe scope and impact.
+
+projects:
+  - name: sample-project
+    tech: Language, Framework, Database
+    url: https://github.com/example/sample
+    url_label: github.com/example/sample
+    bullets:
+      - What it is and the interesting technical decision.
+
+skills:
+  - group: Backend
+    items: "Language, Framework, Database"
+  - group: Tools
+    items: "Git, Docker, CI/CD"
+
+education:
+  - school: A University
+    dates: 2016 – 2020
+    degree: BSc            # rendered as "DEGREE in AREA"
+    area: Something
+    location: City, Country
+    # optional:
+    # bullets:
+    #   - "Relevant coursework: ..."
+
+languages:
+  - name: English
+    level: Native / fluent

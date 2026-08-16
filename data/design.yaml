@@ -1,0 +1,27 @@
+# Shared RenderCV design — tuned to reproduce Denys's approved sb2nov look
+# (Roboto sans-serif, one page, no footer/top-note, tight spacing).
+# Edit here to restyle every variant at once; no code changes needed.
+theme: sb2nov
+page:
+  size: us-letter
+  top_margin: 0.5in
+  bottom_margin: 0.5in
+  left_margin: 0.5in
+  right_margin: 0.5in
+  show_footer: false
+  show_top_note: false
+typography:
+  line_spacing: 0.5em
+  font_family:
+    body: Roboto
+    name: Roboto
+    headline: Roboto
+    connections: Roboto
+    section_titles: Roboto
+sections:
+  space_between_regular_entries: 0.6em
+  space_between_text_based_entries: 0.2em
+entries:
+  highlights:
+    bullet: •
+    space_between_items: 0em

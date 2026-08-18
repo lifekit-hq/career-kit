@@ -12,3 +12,7 @@
 __pycache__/
 *.pyc
 .venv/
+
+# linkedin-scrape tool: scraped output + deps are not committed
+/tools/linkedin-scrape/out-*/
+tools/linkedin-scrape/node_modules/

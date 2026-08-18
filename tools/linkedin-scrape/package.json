@@ -1,0 +1,14 @@
+{
+  "name": "linkedin-scrape",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free LinkedIn profile -> rendered-text extraction over an authenticated Chrome (CDP). No paid API, no OCR.",
+  "bin": { "li-scrape": "./li-scrape.js" },
+  "scripts": {
+    "test": "node --test",
+    "scrape": "node li-scrape.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.0"
+  }
+}

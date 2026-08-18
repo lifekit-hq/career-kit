@@ -1,11 +1,10 @@
 # Private data — real CV content and personal facts NEVER get committed.
 # The tool (code) is public-able; the data is not. See PRIVATE.md.
-/data/profile.yml
-/data/variants/*.yml
-# baseline is empty (defaults only) — safe, kept as the fidelity anchor
-!/data/variants/baseline.yml
+# The whole clients/ tree is private: profiles, variants, scraped captures, and
+# even a client's *name* (a directory) must not hit git.
+/clients/
 
-# Build artifacts
+# Build artifacts (rendered CVs carry the same content as the data)
 /build/
 
 # Python / uv

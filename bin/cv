@@ -1,28 +1,40 @@
 #!/usr/bin/env bash
 # career-kit driver: generate RenderCV input -> render -> ATS-check a variant.
 #
-#   cv build [variant]        merge YAML (uv) and render PDF (RenderCV, sb2nov)
-#   cv ats   [variant]        print the text an ATS parser sees (RenderCV .md)
-#   cv match [variant] <jd>   report which words in <jd> the CV text is missing
+#   cv build [variant] [-c client]   merge YAML (uv) and render PDF (RenderCV)
+#   cv ats   [variant] [-c client]   print the text an ATS parser sees (.md)
+#   cv match [variant] <jd> [-c client]   report JD words missing from the CV
 #
-# variant defaults to "baseline". Requires uv (uvx) + internet on first run
-# (RenderCV self-fetches via uvx).
+# variant defaults to "baseline"; client defaults to clients/.default. Requires
+# uv (uvx) + internet on first run (RenderCV self-fetches via uvx).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build"
 RENDERCV=(uvx --from "rendercv[full]" rendercv)
 
+# Pull an optional -c/--client flag out of the args (from anywhere on the line).
+client=""
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|--client) client="${2:?-c needs a client name}"; shift 2 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]}"
+[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || echo denys-sychov)"
+
 cmd="${1:-build}"
 variant="${2:-baseline}"
-out="$BUILD/$variant"                    # per-variant output folder
+out="$BUILD/$client/$variant"            # per-client, per-variant output folder
 
 md_path() { ls "$out"/*_CV.md 2>/dev/null | head -1; }
 
 case "$cmd" in
   build)
-    uv run "$ROOT/generate.py" "$variant" >/dev/null
-    "${RENDERCV[@]}" render "$BUILD/$variant.rendercv.yaml" \
+    uv run "$ROOT/generate.py" "$variant" -c "$client" >/dev/null
+    "${RENDERCV[@]}" render "$BUILD/$client/$variant.rendercv.yaml" \
         --output-folder "$out" >/dev/null
     echo "→ $(ls "$out"/*_CV.pdf 2>/dev/null | head -1)"
     ;;
@@ -40,7 +52,7 @@ case "$cmd" in
       | while read -r w; do grep -qF "$w" <<<"$txt" || echo "  - $w"; done
     ;;
   *)
-    echo "usage: cv {build|ats|match} [variant] [jd-file]" >&2
+    echo "usage: cv {build|ats|match} [variant] [jd-file] [-c client]" >&2
     exit 1
     ;;
 esac

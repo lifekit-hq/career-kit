@@ -4,30 +4,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-career-kit is a YAML-driven CV tailoring tool. It maintains **one source of truth for facts** and layers **per-role framing** on top, then delegates rendering to [RenderCV](https://github.com/rendercv/rendercv) (invoked via `uvx`, not installed globally). It is a local tool/skill, not a deployed service. Part of the lifekit ecosystem.
+career-kit is a **multi-client, end-to-end career workbench**: research → strategy → optimized LinkedIn → ATS-ready CV, general enough to serve any person. Its CV engine is YAML-driven — one source of truth for facts per client, per-role framing layered on top — delegating rendering to [RenderCV](https://github.com/rendercv/rendercv) (invoked via `uvx`, not installed globally). It is a local tool/skill, not a deployed service. Part of the lifekit ecosystem.
+
+Each person is a **client** under `clients/<name>/` (e.g. `clients/denys-sychov/`, `clients/yelyzaveta-morozova/`). The whole `clients/` tree is private (see the privacy split below).
 
 ## Commands
 
 ```bash
-bin/cv build [variant]        # merge YAML + render -> build/<variant>/..._CV.pdf
-bin/cv ats   [variant]        # print RenderCV's .md (the exact text an ATS parser sees)
-bin/cv match [variant] <jd>   # list JD keywords absent from the CV text
-uv run generate.py [variant]  # merge only -> build/<variant>.rendercv.yaml (no render)
+bin/cv build [variant] [-c client]   # merge YAML + render -> build/<client>/<variant>/..._CV.pdf
+bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)
+bin/cv match [variant] <jd> [-c client]   # list JD keywords absent from the CV text
+uv run generate.py [variant] [-c client]  # merge only -> build/<client>/<variant>.rendercv.yaml
 ```
 
-`variant` defaults to `baseline`. Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). There is no test suite, linter, or build step beyond these.
+`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). The CV engine has no test suite; the standalone `tools/` (e.g. `linkedin-scrape`) carry their own.
 
 ## Architecture
 
-The core idea is a **three-layer split** that RenderCV itself has no concept of — the one-profile/many-variants overlay is exactly what this repo adds on top of the engine:
+The CV engine is a **three-layer split** that RenderCV itself has no concept of — the one-profile/many-variants overlay is exactly what this repo adds on top of the engine. Layers are per-client under `clients/<client>/`, except the shared look:
 
 | Layer | File | Role |
 |-------|------|------|
-| **Truth** | `data/profile.yml` | Facts stated once: name, contacts, keyed experience, education, default skills. Stable across applications. |
-| **Framing** | `data/variants/<role>.yml` | Per-role: selection, order, and prose overrides. Everything optional; omitted keys fall back to profile. |
-| **Look** | `data/design.yaml` | Shared RenderCV `design` block, applied to every variant. |
+| **Truth** | `clients/<client>/profile.yml` | Facts stated once: name, contacts, keyed experience, education, default skills. Stable across applications. |
+| **Framing** | `clients/<client>/variants/<role>.yml` | Per-role: selection, order, and prose overrides. Everything optional; omitted keys fall back to profile. |
+| **Look** | `data/design.yaml` | Shared RenderCV `design` block. Applied to every variant; a client may override with `clients/<client>/design.yaml`. |
 
-Data flow: `generate.py` deep-copies the profile, overlays the variant (`merge()`), translates the authoring schema into a RenderCV input file (`to_rendercv()`), and RenderCV renders it to PDF + Markdown. **The RenderCV Markdown *is* the ATS text** — that's why `ats`/`match` read from `build/<variant>/*_CV.md`.
+`generate.py` resolves the client (`-c`, else `clients/.default`), then: deep-copies that client's profile, overlays the variant (`merge()`), translates the authoring schema into a RenderCV input file (`to_rendercv()`), and RenderCV renders it to PDF + Markdown. **The RenderCV Markdown *is* the ATS text** — that's why `ats`/`match` read from `build/<client>/<variant>/*_CV.md`.
+
+Beyond the CV engine, a client dir also holds `captures/` (scraped LinkedIn data) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/` (e.g. `tools/linkedin-scrape/`).
 
 ### `generate.py` internals
 
@@ -39,18 +43,17 @@ To add a new section type, add a builder to `BUILDERS` and reference its name in
 
 ## Editing rules (important)
 
-- **Edit data, never the generated output.** `build/*.rendercv.yaml` and `build/*.typ` are generated — regenerate from YAML, never hand-edit.
-- Facts go in `profile.yml`; only framing/prose goes in variants.
+- **Edit data, never the generated output.** `build/**/*.rendercv.yaml` and `build/**/*.typ` are generated — regenerate from YAML, never hand-edit.
+- Facts go in `clients/<client>/profile.yml`; only framing/prose goes in that client's variants.
 - `examples/profile.example.yml` is the schema documented with **fabricated** data. Keep it in sync when the schema changes.
-- To restyle all variants at once, edit `data/design.yaml`. Full option list: `uvx --from "rendercv[full]" rendercv new "x" --theme sb2nov`.
+- To restyle everything, edit `data/design.yaml` (shared); for one client only, add `clients/<client>/design.yaml`. Full option list: `uvx --from "rendercv[full]" rendercv new "x" --theme sb2nov`.
 
 ## Code/data privacy split
 
 The **tool** is publishable; the **content** is not. Enforced by `.gitignore`:
 
-- **Never committed:** `data/profile.yml`, `data/variants/*.yml`, `build/`.
-- **Exception:** `data/variants/baseline.yml` is committed — it holds no content (defaults only) and serves as the generator fidelity anchor.
-- **Safe to commit:** `generate.py`, `bin/`, `.claude/skills/`, `examples/`, docs.
+- **Never committed:** the entire `clients/` tree (profiles, variants, scraped `captures/`, `docs/` — and the client *directory name* itself is an identity), plus `build/`.
+- **Safe to commit:** `generate.py`, `bin/`, `data/design.yaml`, `tools/` code, `.claude/skills/`, `examples/`, docs. `examples/profile.example.yml` (fabricated) is the committed schema/fidelity anchor.
 
 See `PRIVATE.md` for the full contract.
 

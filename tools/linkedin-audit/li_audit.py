@@ -1,6 +1,9 @@
 """career linkedin audit - deterministic rubric over a LinkedIn profile snapshot.
 
-    python3 li_audit.py <snapshot-dir> [--json]
+    python3 li_audit.py <snapshot-dir> [--json] [--keywords <regex>]
+
+--keywords overrides the role-keyword regex used by the headline and
+pinned-skills checks (default targets SMM/marketing profiles).
 
 Reads a capture-store snapshot (li-scrape layout or legacy flat layout, same
 section mapping as tools/linkedin-diff) and scores it against a rubric of
@@ -24,7 +27,8 @@ SECTION_FILES = {
     "interests":  ["raw/interests.txt", "interests.txt"],
 }
 
-SMM_WORDS = re.compile(r"social media|content|marketing|smm|brand", re.I)
+DEFAULT_KEYWORDS = r"social media|content|marketing|smm|brand"
+SMM_WORDS = re.compile(DEFAULT_KEYWORDS, re.I)  # rebound per-run by audit()
 MARKETING_INTEREST = re.compile(r"marketing|media|advertis|canva|institute|creator", re.I)
 
 
@@ -46,7 +50,16 @@ def load(snap: Path) -> dict:
             manifest = json.loads(mp.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             pass
-    return {"sections": sections, "manifest": manifest}
+    structured = {}
+    for rel in ("profile.json", "profile_structured.json"):
+        sp = snap / rel
+        if sp.is_file():
+            try:
+                structured = json.loads(sp.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                pass
+            break
+    return {"sections": sections, "manifest": manifest, "structured": structured}
 
 
 def _check_headline(s):
@@ -88,6 +101,10 @@ def _check_skill_count(s):
     if m:
         n = int(m.group(1))
         return ("pass" if n >= 5 else "warn"), f"{n} skills listed"
+    skills = s["structured"].get("skills")
+    if isinstance(skills, list) and skills:
+        n = len(skills)
+        return ("pass" if n >= 5 else "warn"), f"{n} skills (from structured parse)"
     return "info", "skill count not detectable in capture"
 
 
@@ -96,9 +113,16 @@ def _check_experience_bullets(s):
     bullets = [l for l in lines if l.startswith(("-", "•"))]
     if len(bullets) >= 3:
         return "pass", f"{len(bullets)} bullet lines across roles"
+    positions = s["structured"].get("positions")
+    if isinstance(positions, list) and positions:
+        described = sum(1 for p in positions if p.get("description"))
+        if described == len(positions):
+            return "pass", f"all {described} roles carry prose descriptions"
+        if described:
+            return "warn", f"{described}/{len(positions)} roles described"
     if bullets:
         return "warn", f"only {len(bullets)} bullet lines - roles thinly described"
-    return "fail", "experience entries have no bullet descriptions"
+    return "fail", "experience entries have no descriptions"
 
 
 def _check_education(s):
@@ -164,7 +188,9 @@ CHECKS = [
 ]
 
 
-def audit(snap: Path) -> dict:
+def audit(snap: Path, keywords: str | None = None) -> dict:
+    global SMM_WORDS
+    SMM_WORDS = re.compile(keywords or DEFAULT_KEYWORDS, re.I)
     s = load(snap)
     results = []
     for cid, title, fn in CHECKS:
@@ -187,6 +213,15 @@ def to_markdown(report: dict) -> str:
 def main(argv: list[str]) -> int:
     as_json = "--json" in argv
     argv = [x for x in argv if x != "--json"]
+    keywords = None
+    if "--keywords" in argv:
+        i = argv.index("--keywords")
+        try:
+            keywords = argv[i + 1]
+        except IndexError:
+            print("--keywords needs a regex", file=sys.stderr)
+            return 2
+        del argv[i:i + 2]
     if len(argv) != 1:
         print(__doc__, file=sys.stderr)
         return 2
@@ -194,7 +229,7 @@ def main(argv: list[str]) -> int:
     if not snap.is_dir():
         print(f"not a snapshot dir: {snap}", file=sys.stderr)
         return 1
-    report = audit(snap)
+    report = audit(snap, keywords)
     print(json.dumps(report) if as_json else to_markdown(report))
     return 0
 

@@ -92,6 +92,32 @@ class LiAuditTest(unittest.TestCase):
                       if r["id"] == "followers")
         self.assertEqual(detail, "661 followers")
 
+    def test_keywords_override(self):
+        snap = self.root / "s"
+        make_snapshot(snap, {"profile": "Jane\nSenior Software Engineer | .NET | Angular"})
+        st_default = self._statuses(li_audit.audit(snap))
+        self.assertEqual(st_default["headline"], "warn")
+        st_dev = self._statuses(li_audit.audit(snap, keywords=r"engineer|\.net|angular"))
+        self.assertEqual(st_dev["headline"], "pass")
+
+    def test_experience_prose_fallback(self):
+        snap = self.root / "s"
+        make_snapshot(snap, {"experience": "Senior Engineer\nAcme · Full-time\nProse only."})
+        (snap / "profile.json").write_text(json.dumps({"positions": [
+            {"title": "Senior Engineer", "description": ["Did prose things."]},
+            {"title": "Engineer", "description": ["More prose."]},
+        ]}), encoding="utf-8")
+        st = self._statuses(li_audit.audit(snap))
+        self.assertEqual(st["experience_bullets"], "pass")
+
+    def test_skill_count_falls_back_to_structured(self):
+        snap = self.root / "s"
+        make_snapshot(snap, {"skills": "no count header here"})
+        (snap / "profile.json").write_text(json.dumps(
+            {"skills": [{"name": f"s{i}"} for i in range(6)]}), encoding="utf-8")
+        st = self._statuses(li_audit.audit(snap))
+        self.assertEqual(st["skill_count"], "pass")
+
     def test_info_checks_never_scored(self):
         snap = self.root / "s"
         make_snapshot(snap, {"profile": "x"})

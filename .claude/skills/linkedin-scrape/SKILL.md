@@ -32,7 +32,8 @@ let the LLM (you) turn text → JSON. Never OCR the screenshots.**
 ## Prerequisites
 - **A logged-in Chrome over CDP on port 9777.** The Playwright/Chrome-DevTools MCPs
   fail on this machine (they want Chrome at `/opt/google/chrome`, which needs sudo).
-  Drive Chrome directly with `playwright-core` over CDP instead:
+  The tool connects to this Chrome over CDP (Python `playwright`); the binary
+  below is only needed to launch the browser itself:
   ```bash
   CHROME_BIN=$(find ~/.cache/puppeteer/chrome ~/.cache/ms-playwright -name chrome -type f 2>/dev/null | head -1)
   "$CHROME_BIN" --user-data-dir="$HOME/.cache/pw-li-profile" \
@@ -40,20 +41,24 @@ let the LLM (you) turn text → JSON. Never OCR the screenshots.**
   ```
 - **Denys logs into LinkedIn once** in that window; the session persists in the
   user-data dir. LinkedIn shows nothing useful anonymously (authwall).
-- `playwright-core` installed (in the tool dir: `npm install`).
+- Nothing else: the tool is a `uv` script that declares its own `playwright`
+  dependency (fetched on first run). No npm, no install step.
 
 ## Steps
 1. **Ensure the browser is up and logged in.** If `connectOverCDP('http://127.0.0.1:9777')`
    fails, launch Chrome as above and ask Denys to log in. If a page lands on
    `authwall`/`login`, the session expired — ask him to log in again.
-2. **Run the tool:**
+2. **Run the tool** - prefer the CLI so the capture lands in the dated store:
    ```bash
-   cd tools/linkedin-scrape
-   CHROME_BIN=$CHROME_BIN node li-scrape.js <profile-url-or-id> [outDir]
+   bin/career linkedin capture <profile-url-or-id> -c <client>
+   # or, standalone (ad-hoc target, e.g. researching a recruiter):
+   uv run tools/linkedin-scrape/li_scrape.py <profile-url-or-id> [outDir]
+   # job posts too:
+   uv run tools/linkedin-scrape/li_scrape.py <jobs-view-url-or-job-id> [outDir]
    ```
    It visits profile + experience/education/skills/interests, saving
    `raw/<section>.txt` (parse source), `raw/<section>.png` (human artifact), and
-   `profile.raw.txt` (concatenated).
+   `profile.raw.txt` (concatenated). Job mode saves `raw/job.txt` + `job.json`.
 3. **Contact info** (email) is behind a modal, not the section pages. If needed,
    click the "Contact info" link and read the `[role=dialog]` text separately.
 4. **Parse text → JSON yourself.** Read `profile.raw.txt` and write clean structured

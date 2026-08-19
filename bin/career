@@ -3,6 +3,7 @@
 # Contract (taxonomy, JSON envelope, exit codes): docs/CONTRACT.md
 #
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
+#   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
 #   career linkedin capture <url|public-id>   snapshot a profile into the store
 #   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
 #   career linkedin audit [snapshot]          rubric-score a snapshot (default: latest)
@@ -17,6 +18,7 @@ SCRAPER="$ROOT/tools/linkedin-scrape/li_scrape.py"
 DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
 AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
 JDINTEL="$ROOT/tools/jd-intel/jd_intel.py"
+LINTER="$ROOT/tools/career-lint/career_lint.py"
 
 client="" json=0
 args=()
@@ -114,6 +116,22 @@ scrape_to_store() {
 
 case "$lane" in
   cv)
+    if [ "$verb" = lint ]; then
+      require_client_dir
+      variant="${3:-baseline}"
+      snap="$(snapshots profile | head -1)"
+      [ -n "$snap" ] || fail "no profile snapshots for $client - run: career linkedin capture"
+      vargs=()
+      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      [ -f "$vfile" ] && vargs=(--variant "$vfile")
+      if [ "$json" = 1 ]; then
+        data="$(python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"} --json)" \
+          || [ $? -eq 1 ] || fail "lint failed to run"
+        emit true "$data" -
+      else
+        exec python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"}
+      fi
+    fi
     case "$verb" in
       build|ats|match) ;;
       *) usage ;;

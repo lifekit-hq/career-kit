@@ -6,13 +6,39 @@ A snapshot is a capture-store dir (see docs/CONTRACT.md): either the
 li-scrape layout (raw/<section>.txt + profile.json) or the legacy flat
 layout (profile_text.txt, experience.txt, ... + profile_structured.json).
 
-Design note: no noise stoplist. LinkedIn chrome (nav, footers) is identical
-in both snapshots, so a set-difference diff cancels it out; only real content
-changes survive. Stdlib only.
+Design note: same-layout snapshots cancel LinkedIn chrome (nav, footers) via
+set difference alone; the chrome stoplist below only exists so legacy-vs-new
+comparisons stay clean too (the old hand-scrapes included page chrome the
+tool strips). Stdlib only.
 """
 import json
+import re
 import sys
 from pathlib import Path
+
+# LinkedIn page chrome: never profile content, safe to drop before diffing.
+CHROME_EXACT = {
+    "Home", "My Network", "Jobs", "Messaging", "Notifications", "Me",
+    "For Business", "About", "Accessibility", "Talent Solutions",
+    "Community Guidelines", "Careers", "Marketing Solutions", "Privacy & Terms",
+    "Ad Choices", "Advertising", "Sales Solutions", "Mobile", "Small Business",
+    "Safety Center", "Questions?", "Visit our Help Center.",
+    "Manage your account and privacy", "Go to your Settings.",
+    "Recommendation transparency", "Learn more about Recommended Content.",
+    "Select language", "Keyboard shortcuts", "Close jump menu",
+    "new feed updates notifications",
+}
+CHROME_RE = re.compile(
+    r"^(Skip to |\d+ notifications|Reactivate Premium|LinkedIn Corporation ©)"
+    r"|\((Arabic|Bangla|Czech|Danish|German|Greek|English|Spanish|Persian|"
+    r"Finnish|French|Hindi|Hungarian|Indonesian|Italian|Hebrew|Japanese|"
+    r"Korean|Marathi|Malay|Dutch|Norwegian|Punjabi|Polish|Portuguese|"
+    r"Romanian|Russian|Swedish|Telugu|Thai|Tagalog|Turkish|Ukrainian|"
+    r"Vietnamese|Chinese \((Simplified|Traditional)\))\)$")
+
+
+def is_chrome(line: str) -> bool:
+    return line in CHROME_EXACT or bool(CHROME_RE.search(line))
 
 # section name -> candidate files, first hit wins (new layout, then legacy)
 SECTION_FILES = {
@@ -30,7 +56,7 @@ def _lines(path: Path) -> list[str]:
     seen, out = set(), []
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
-        if line and line not in seen:
+        if line and line not in seen and not is_chrome(line):
             seen.add(line)
             out.append(line)
     return out

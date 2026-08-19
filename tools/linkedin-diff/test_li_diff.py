@@ -84,6 +84,15 @@ class LiDiffTest(unittest.TestCase):
         md = li_diff.to_markdown(d, "a", "b")
         self.assertIn("No changes detected", md)
 
+    def test_chrome_stripped_across_layouts(self):
+        chrome = ("Skip to search\nHome\nMy Network\n5 notifications\n"
+                  "Reactivate Premium: 50% Off\nDeutsch (German)\n"
+                  "LinkedIn Corporation © 2026\n")
+        a, b = self.root / "a", self.root / "b"
+        make_snapshot(a, "legacy", {"profile": chrome + "Real headline"})
+        make_snapshot(b, "new", {"profile": "Real headline"})
+        self.assertEqual(self._diff(a, b)["sections"], {})
+
     def test_blank_and_duplicate_lines_normalized(self):
         a, b = self.root / "a", self.root / "b"
         make_snapshot(a, "new", {"profile": "x\n\nx\n  x  "})

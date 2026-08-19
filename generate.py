@@ -162,6 +162,28 @@ BUILDERS = {
 }
 
 
+# RenderCV renders each highlight as a Markdown list item, so a " - " *inside*
+# one is parsed as a new list item and the bullet silently becomes two - in the
+# PDF and in the ATS Markdown alike. Caught here rather than documented, because
+# the failure is invisible in the YAML and ships straight to a recruiter.
+BULLET_SPLITTER = " - "
+
+
+def _check_highlights(sections: dict) -> None:
+    bad = [(title, h)
+           for title, entries in sections.items()
+           for entry in entries if isinstance(entry, dict)
+           for h in entry.get("highlights", [])
+           if isinstance(h, str) and BULLET_SPLITTER in h]
+    if not bad:
+        return
+    listing = "\n".join(f"  [{title}] {h}" for title, h in bad)
+    raise SystemExit(
+        f'{len(bad)} bullet(s) contain " - ", which RenderCV renders as a new '
+        "list item - each of these would silently become two bullets in the PDF "
+        "and the ATS Markdown.\nUse a comma, a semicolon, or a rewrite:\n" + listing)
+
+
 def to_rendercv(cfg: dict, design: dict) -> dict:
     cv = {"name": cfg["name"], "headline": cfg["headline"]}
     if cfg.get("location"):
@@ -172,6 +194,7 @@ def to_rendercv(cfg: dict, design: dict) -> dict:
         title, entries = BUILDERS[name](cfg)
         if entries:
             sections[title] = entries
+    _check_highlights(sections)
     cv["sections"] = sections
     return {"cv": cv, "design": design, "locale": {"language": "english"}}
 

@@ -23,6 +23,7 @@ bin/career linkedin diff [snapA snapB] [-c client]  # compare snapshots (default
 bin/career linkedin audit [snapshot] [-c client]  # rubric-score a snapshot (default: latest)
 bin/career linkedin jd <jobs-url|job-id> [-c client]  # snapshot a job post (manifest kind: job)
 bin/career linkedin keywords [variant] [-c client]  # JD keyword corpus, marked against the CV text
+bin/career linkedin benchmark <snap-dir>...  # target model from reference-profile captures (ad-hoc out-dirs)
 
 bin/cv build [variant] [-c client]   # back-compat alias: merge YAML + render -> PDF
 bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)

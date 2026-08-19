@@ -19,6 +19,7 @@ DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
 AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
 JDINTEL="$ROOT/tools/jd-intel/jd_intel.py"
 LINTER="$ROOT/tools/career-lint/career_lint.py"
+BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
 
 client="" json=0
 args=()
@@ -171,6 +172,17 @@ case "$lane" in
           emit true "$(python3 -c 'import json,sys; print(json.dumps({"snapshot": sys.argv[1]}))' "$snap")" -
         else
           echo "→ $snap"
+        fi
+        ;;
+
+      benchmark)
+        shift 2 || true
+        [ $# -ge 1 ] || fail "usage: career linkedin benchmark <snapshot-dir>... (reference captures live in ad-hoc out-dirs, not client dirs)"
+        if [ "$json" = 1 ]; then
+          data="$(python3 "$BENCH" "$@" --json)" || fail "benchmark failed"
+          emit true "$data" -
+        else
+          exec python3 "$BENCH" "$@"
         fi
         ;;
 

@@ -17,7 +17,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   | Lane | Verbs (implemented) | Verbs (planned) |
   |------|---------------------|-----------------|
   | `cv` | `build`, `ats`, `match` | - |
-  | `linkedin` | `capture`, `diff`, `audit` | `jd`, `benchmark` |
+  | `linkedin` | `capture`, `diff`, `audit`, `jd`, `keywords` | `benchmark` |
   | `portfolio` | - | (lane reserved) |
   | `strategy` | - | (lane reserved) |
 
@@ -60,8 +60,11 @@ one JSON object to stdout:
 
 - `clients/<client>/captures/<ISO-8601-UTC>/` - one **snapshot** per capture:
   the scraper's output plus a `manifest.json` (`target`, `captured_at`,
-  `tool`, `pages`). Snapshots are immutable evidence: append-only, never
-  edited, never committed (the whole `clients/` tree is gitignored).
+  `tool`, `kind`, `pages`). `kind` is `profile` or `job` (absent reads as
+  `profile`); default snapshot resolution filters by kind, so job captures
+  never pollute profile diffs/audits. Snapshots are immutable evidence:
+  append-only, never edited, never committed (the whole `clients/` tree is
+  gitignored).
 - Legacy flat captures are wrapped as a dated snapshot with
   `"legacy": true` in the manifest; readers must accept both layouts.
 - `build/<client>/<variant>/` - CV lane output (generated, disposable).

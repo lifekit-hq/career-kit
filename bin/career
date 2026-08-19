@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# career - the executor CLI. One precise chunk of career work per verb.
+# Contract (taxonomy, JSON envelope, exit codes): docs/CONTRACT.md
+#
+#   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
+#   career linkedin capture <url|public-id>   snapshot a profile into the store
+#   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
+#
+# Global flags (anywhere on the line): -c|--client <name>, --json
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRAPER="$ROOT/tools/linkedin-scrape/li-scrape.js"
+DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
+
+client="" json=0
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|--client) client="${2:?-c needs a client name}"; shift 2 ;;
+    --json) json=1; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+set -- "${args[@]+"${args[@]}"}"
+[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || echo denys-sychov)"
+
+lane="${1:-}"; verb="${2:-}"
+
+usage() { echo "usage: career {cv|linkedin} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)" >&2; exit 2; }
+
+# emit <ok> <data-json|null> <error-message|-> ; then exit accordingly.
+emit() {
+  local ok="$1" data="$2" err="$3"
+  if [ "$json" = 1 ]; then
+    python3 - "$ok" "$lane" "$verb" "$client" "$data" "$err" <<'PY'
+import json, sys
+ok, lane, verb, client, data, err = sys.argv[1:7]
+print(json.dumps({
+    "ok": ok == "true", "lane": lane, "verb": verb, "client": client,
+    "data": None if data == "null" else json.loads(data),
+    "error": None if err == "-" else {"message": err},
+}))
+PY
+  elif [ "$err" != "-" ]; then
+    echo "error: $err" >&2
+  fi
+  [ "$ok" = true ] || exit 1
+}
+
+fail() { emit false null "$1"; }
+
+require_client_dir() {
+  [ -d "$ROOT/clients/$client" ] || { echo "unknown client: $client" >&2; exit 2; }
+}
+
+# Newest-first snapshot dirs (a snapshot = a dir containing manifest.json).
+snapshots() {
+  ls -1d "$ROOT/clients/$client/captures/"*/ 2>/dev/null \
+    | while read -r d; do [ -f "$d/manifest.json" ] && echo "${d%/}"; done \
+    | sort -r
+}
+
+case "$lane" in
+  cv)
+    case "$verb" in
+      build|ats|match) ;;
+      *) usage ;;
+    esac
+    shift 2 || true
+    if [ "$json" = 1 ] && [ "$verb" = build ]; then
+      out="$("$ROOT/bin/cv" "$verb" "$@" -c "$client")" || fail "cv build failed"
+      pdf="${out#→ }"
+      emit true "$(python3 -c 'import json,sys; print(json.dumps({"pdf": sys.argv[1]}))' "$pdf")" -
+    else
+      exec "$ROOT/bin/cv" "$verb" "$@" -c "$client"   # text verbs pass through
+    fi
+    ;;
+
+  linkedin)
+    require_client_dir
+    case "$verb" in
+      capture)
+        target="${3:?usage: career linkedin capture <profile-url-or-public-id>}"
+        curl -sf --max-time 3 http://localhost:9777/json/version >/dev/null 2>&1 \
+          || fail "no CDP Chrome on :9777 - launch your logged-in Chrome first (see tools/linkedin-scrape/README.md)"
+        if [ -z "${CHROME_BIN:-}" ]; then
+          CHROME_BIN="$(find "$HOME/.cache/puppeteer/chrome" "$HOME/.cache/ms-playwright" \
+            -name chrome -type f 2>/dev/null | head -1)"
+          [ -n "$CHROME_BIN" ] || CHROME_BIN=/usr/bin/google-chrome
+          export CHROME_BIN
+        fi
+        snap="$ROOT/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+        mkdir -p "$snap"
+        if ! (cd "$ROOT/tools/linkedin-scrape" && node li-scrape.js "$target" "$snap" >&2); then
+          rm -rf "$snap"
+          fail "scrape failed for $target"
+        fi
+        python3 - "$snap" "$target" <<'PY'
+import json, os, sys, datetime
+snap, target = sys.argv[1], sys.argv[2]
+pages = sorted(p for p in os.listdir(os.path.join(snap, "raw"))
+               if p.endswith(".txt")) if os.path.isdir(os.path.join(snap, "raw")) else []
+manifest = {
+    "target": target,
+    "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "tool": "li-scrape",
+    "pages": pages,
+    "legacy": False,
+}
+with open(os.path.join(snap, "manifest.json"), "w") as f:
+    json.dump(manifest, f, indent=2)
+PY
+        if [ "$json" = 1 ]; then
+          emit true "$(python3 -c 'import json,sys; print(json.dumps({"snapshot": sys.argv[1]}))' "$snap")" -
+        else
+          echo "→ $snap"
+        fi
+        ;;
+
+      diff)
+        a="${3:-}"; b="${4:-}"
+        if [ -z "$a" ]; then
+          mapfile -t latest < <(snapshots | head -2)
+          [ "${#latest[@]}" -ge 2 ] || fail "need two snapshots for $client (found ${#latest[@]}) - run: career linkedin capture"
+          a="${latest[1]}"; b="${latest[0]}"   # older -> newer
+        fi
+        [ -d "$a" ] && [ -d "$b" ] || fail "snapshot dir not found: $a / $b"
+        if [ "$json" = 1 ]; then
+          data="$(python3 "$DIFFER" "$a" "$b" --json)" || fail "diff failed"
+          emit true "$data" -
+        else
+          exec python3 "$DIFFER" "$a" "$b"
+        fi
+        ;;
+
+      *) usage ;;
+    esac
+    ;;
+
+  *) usage ;;
+esac

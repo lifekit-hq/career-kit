@@ -10,12 +10,26 @@ Each person is a **client** under `clients/<name>/` (e.g. `clients/denys-sychov/
 
 ## Commands
 
+`bin/career` is the executor CLI — one precise chunk of career work per verb,
+honoring the contract in `docs/CONTRACT.md` (JSON envelope via `--json`, exit
+codes, per-client resolution). Destination/milestones: `PLAN.md`; backlog:
+GitHub issues.
+
 ```bash
-bin/cv build [variant] [-c client]   # merge YAML + render -> build/<client>/<variant>/..._CV.pdf
+bin/career cv build|ats|match [...] [-c client] [--json]  # CV lane (delegates to bin/cv)
+bin/career linkedin capture <url|id> [-c client]  # snapshot -> clients/<c>/captures/<ISO>/ (+manifest)
+bin/career linkedin diff [snapA snapB] [-c client]  # compare snapshots (default: two latest)
+
+bin/cv build [variant] [-c client]   # back-compat alias: merge YAML + render -> PDF
 bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)
 bin/cv match [variant] <jd> [-c client]   # list JD keywords absent from the CV text
 uv run generate.py [variant] [-c client]  # merge only -> build/<client>/<variant>.rendercv.yaml
 ```
+
+`linkedin capture` needs the logged-in CDP Chrome from
+`tools/linkedin-scrape/README.md`. The LinkedIn lane is **read-only** — never
+automate writes to a LinkedIn account (contract hard rule). Diff tests:
+`python3 -m unittest discover -s tools/linkedin-diff`.
 
 `variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). The CV engine has no test suite; the standalone `tools/` (e.g. `linkedin-scrape`) carry their own.
 
@@ -31,7 +45,7 @@ The CV engine is a **three-layer split** that RenderCV itself has no concept of 
 
 `generate.py` resolves the client (`-c`, else `clients/.default`), then: deep-copies that client's profile, overlays the variant (`merge()`), translates the authoring schema into a RenderCV input file (`to_rendercv()`), and RenderCV renders it to PDF + Markdown. **The RenderCV Markdown *is* the ATS text** — that's why `ats`/`match` read from `build/<client>/<variant>/*_CV.md`.
 
-Beyond the CV engine, a client dir also holds `captures/` (scraped LinkedIn data) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/` (e.g. `tools/linkedin-scrape/`).
+Beyond the CV engine, a client dir also holds `captures/` (dated LinkedIn snapshots — `<ISO-timestamp>/` dirs with a `manifest.json`, append-only evidence; legacy flat captures are wrapped as a snapshot with `"legacy": true`) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/` (`tools/linkedin-scrape/`, `tools/linkedin-diff/`).
 
 ### `generate.py` internals
 

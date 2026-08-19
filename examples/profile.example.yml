@@ -1,9 +1,13 @@
 # ─────────────────────────────────────────────────────────────────────────
 # EXAMPLE profile — fabricated data showing the schema. Copy to
-# ../data/profile.yml and fill with your own facts (that file is gitignored).
+# ../clients/<name>/profile.yml and fill with real facts (the whole clients/
+# tree is gitignored).
 # ─────────────────────────────────────────────────────────────────────────
 name: Ada Lovelace
 headline: Senior Software Engineer | Backend & Platform
+# Optional: rendered in the header contact line. Good place for right-to-work
+# status where that matters (e.g. "Dublin, Ireland (Stamp 4)").
+location: London, UK
 
 contacts:
   - href: mailto:ada@example.com
@@ -42,6 +46,9 @@ projects:
     bullets:
       - What it is and the interesting technical decision.
 
+# Optional: section title for skills (default "Technical Skills" — use plain
+# "Skills" for non-engineering CVs).
+# skills_title: Skills
 skills:
   - group: Backend
     items: "Language, Framework, Database"

@@ -53,8 +53,8 @@ def merge(profile: dict, variant: dict) -> dict:
     cfg = copy.deepcopy(profile)
     v = variant or {}
 
-    for key in ("name", "headline", "summary", "contacts", "skills",
-                "projects", "education", "languages", "sections"):
+    for key in ("name", "headline", "location", "summary", "contacts", "skills",
+                "skills_title", "projects", "education", "languages", "sections"):
         if key in v:
             cfg[key] = v[key]
 
@@ -73,14 +73,27 @@ def merge(profile: dict, variant: dict) -> dict:
 
 
 def _contacts(cfg) -> dict:
-    """Map our contacts list -> RenderCV email/phone/social_networks."""
-    out, socials = {}, []
+    """Map our contacts list -> RenderCV email/phone/social_networks.
+
+    A link contact whose `label` differs from its bare href becomes a
+    custom_connection: the label is displayed, the href is the link target
+    (e.g. a short LinkedIn label over the long auto-generated profile URL).
+    """
+    out, socials, customs = {}, [], []
     for c in cfg.get("contacts", []):
         href = c["href"].rstrip("/")
+        bare = href.split("://", 1)[-1]
         if href.startswith("mailto:"):
             out["email"] = href[len("mailto:"):]
         elif href.startswith("tel:"):
             out["phone"] = href[len("tel:"):]           # RenderCV formats it
+        elif c.get("label") and c["label"] != bare:
+            # fontawesome_icon is required by RenderCV even when the design
+            # hides icons (header.connections.show_icons: false).
+            icon = ("linkedin" if "linkedin.com" in href
+                    else "github" if "github.com" in href else "link")
+            customs.append({"placeholder": c["label"], "url": href,
+                            "fontawesome_icon": icon})
         elif "linkedin.com/in/" in href:
             socials.append({"network": "LinkedIn", "username": href.split("/in/")[-1]})
         elif "github.com/" in href:
@@ -89,6 +102,8 @@ def _contacts(cfg) -> dict:
             out["website"] = href
     if socials:
         out["social_networks"] = socials
+    if customs:
+        out["custom_connections"] = customs
     return out
 
 
@@ -117,7 +132,7 @@ def _sec_projects(cfg):
 
 
 def _sec_skills(cfg):
-    return "Technical Skills", [
+    return cfg.get("skills_title", "Technical Skills"), [
         {"label": g["group"], "details": g["items"]} for g in cfg.get("skills", [])
     ]
 
@@ -149,6 +164,8 @@ BUILDERS = {
 
 def to_rendercv(cfg: dict, design: dict) -> dict:
     cv = {"name": cfg["name"], "headline": cfg["headline"]}
+    if cfg.get("location"):
+        cv["location"] = cfg["location"]
     cv.update(_contacts(cfg))
     sections = {}
     for name in cfg.get("sections", list(BUILDERS)):

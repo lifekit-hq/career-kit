@@ -19,18 +19,10 @@ What *does* work for free and stays durable: drive an **already-logged-in browse
 
 ## Setup
 
-Needs [`playwright-core`](https://www.npmjs.com/package/playwright-core) and a Chrome/Chromium binary.
-
-```bash
-cd tools/linkedin-scrape
-npm install                      # installs playwright-core
-
-# Find a Chrome binary (any of these usually exist):
-#   ~/.cache/puppeteer/chrome/*/chrome-linux64/chrome
-#   ~/.cache/ms-playwright/chromium-*/chrome-linux/chrome
-#   /usr/bin/google-chrome
-export CHROME_BIN=/path/to/chrome
-```
+Python via [`uv`](https://docs.astral.sh/uv/) - the script declares its own
+dependency (`playwright`) and uv fetches it on first run. No install step. A
+Chrome/Chromium binary is only needed to LAUNCH the logged-in browser below
+(the script itself just connects over CDP).
 
 ### One-time: launch a headed Chrome and log in once
 
@@ -45,14 +37,19 @@ The session persists in the user-data dir, so you log in a single time.
 ## Usage
 
 ```bash
-CHROME_BIN=/path/to/chrome node li-scrape.js <profile-url-or-public-id> [outDir]
+uv run li_scrape.py <profile-url-or-public-id> [outDir]
+uv run li_scrape.py <jobs-view-url-or-job-id>  [outDir]
 
 # examples
-node li-scrape.js https://www.linkedin.com/in/some-person-12345/
-node li-scrape.js some-person-12345 ./out-some-person
+uv run li_scrape.py https://www.linkedin.com/in/some-person-12345/
+uv run li_scrape.py some-person-12345 ./out-some-person
+uv run li_scrape.py https://www.linkedin.com/jobs/view/4012345678/
 ```
 
-Accepts a full profile URL (any section) or a bare public ID. Default `outDir` is `./out-<publicId>/`.
+Accepts a full profile URL (any section), a bare public ID, a `/jobs/view/`
+URL, or a bare numeric job id. Default `outDir` is `./out-<publicId>/` (or
+`./out-job-<id>/`). Job mode writes `raw/job.txt` + `raw/job.png` + `job.json`
+(schema `li-scrape-job/1`: title, company, location, description).
 
 ### Output
 
@@ -75,14 +72,14 @@ out-<publicId>/
 
 ## Tests
 
-The pure text/URL/parse helpers are covered by a unit suite that needs **zero npm install** — it uses Node's built-in `node:test` and never loads `playwright-core` (the browser runner only executes when the file is run directly):
+The pure text/URL/parse helpers are covered by a stdlib `unittest` suite that
+never imports playwright (the runner imports it lazily):
 
 ```bash
-cd tools/linkedin-scrape
-npm test          # or: node --test
+python3 -m unittest discover -s tools/linkedin-scrape
 ```
 
-The extractor now also writes `profile.json` automatically as a **best-effort** structured parse of the rendered text (positions, education, skills, contact email). It's a heuristic over shifting markup — hand `profile.raw.txt` to an LLM when you need a rich, robust parse.
+The extractor also writes `profile.json` (schema `li-scrape/1`) as a **best-effort** structured parse of the rendered text (positions, education, skills, contact email). It's a heuristic over shifting markup — hand `profile.raw.txt` to an LLM when you need a rich, robust parse.
 
 ## Limitations
 

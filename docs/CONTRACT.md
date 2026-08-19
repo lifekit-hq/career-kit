@@ -17,7 +17,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   | Lane | Verbs (implemented) | Verbs (planned) |
   |------|---------------------|-----------------|
   | `cv` | `build`, `ats`, `match` | - |
-  | `linkedin` | `capture`, `diff` | `audit`, `jd`, `benchmark` |
+  | `linkedin` | `capture`, `diff`, `audit` | `jd`, `benchmark` |
   | `portfolio` | - | (lane reserved) |
   | `strategy` | - | (lane reserved) |
 

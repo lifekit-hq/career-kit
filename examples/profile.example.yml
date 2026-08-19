@@ -31,6 +31,9 @@ experience:
   - key: acme
     title: Senior Software Engineer
     company: Acme Corp
+    # Optional: extra names `career cv lint` accepts as this company on
+    # LinkedIn (e.g. a company page in another script/language).
+    # lint_aliases: ["Акме Корп"]
     location: Remote
     start: Jan. 2023
     end: Present

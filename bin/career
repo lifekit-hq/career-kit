@@ -5,6 +5,9 @@
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
 #   career linkedin capture <url|public-id>   snapshot a profile into the store
 #   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
+#   career linkedin audit [snapshot]          rubric-score a snapshot (default: latest)
+#   career linkedin jd <jobs-url|job-id>      snapshot a job post into the store
+#   career linkedin keywords [variant]        JD keyword corpus vs the CV text
 #
 # Global flags (anywhere on the line): -c|--client <name>, --json
 set -euo pipefail
@@ -13,6 +16,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRAPER="$ROOT/tools/linkedin-scrape/li_scrape.py"
 DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
 AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
+JDINTEL="$ROOT/tools/jd-intel/jd_intel.py"
 
 client="" json=0
 args=()
@@ -55,11 +59,57 @@ require_client_dir() {
   [ -d "$ROOT/clients/$client" ] || { echo "unknown client: $client" >&2; exit 2; }
 }
 
-# Newest-first snapshot dirs (a snapshot = a dir containing manifest.json).
+# Newest-first snapshot dirs of one kind (a snapshot = a dir with manifest.json;
+# a manifest without "kind" reads as a profile snapshot).
 snapshots() {
-  ls -1d "$ROOT/clients/$client/captures/"*/ 2>/dev/null \
-    | while read -r d; do [ -f "$d/manifest.json" ] && echo "${d%/}"; done \
-    | sort -r
+  python3 - "$ROOT/clients/$client/captures" "${1:-profile}" <<'PY'
+import json, os, sys
+root, kind = sys.argv[1], sys.argv[2]
+if os.path.isdir(root):
+    for d in sorted(os.listdir(root), reverse=True):
+        m = os.path.join(root, d, "manifest.json")
+        if os.path.isfile(m):
+            try:
+                k = json.load(open(m)).get("kind", "profile")
+            except Exception:
+                continue
+            if k == kind:
+                print(os.path.join(root, d))
+PY
+}
+
+# write_manifest <snapdir> <target> <kind>
+write_manifest() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, os, sys, datetime
+snap, target, kind = sys.argv[1:4]
+raw = os.path.join(snap, "raw")
+pages = sorted(p for p in os.listdir(raw) if p.endswith(".txt")) if os.path.isdir(raw) else []
+manifest = {
+    "target": target,
+    "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "tool": "li-scrape",
+    "kind": kind,
+    "pages": pages,
+    "legacy": False,
+}
+with open(os.path.join(snap, "manifest.json"), "w") as f:
+    json.dump(manifest, f, indent=2)
+PY
+}
+
+# scrape_to_store <target> <kind> ; sets $snap
+scrape_to_store() {
+  local target="$1" kind="$2"
+  curl -sf --max-time 3 http://localhost:9777/json/version >/dev/null 2>&1 \
+    || fail "no CDP Chrome on :9777 - launch your logged-in Chrome first (see tools/linkedin-scrape/README.md)"
+  snap="$ROOT/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+  mkdir -p "$snap"
+  if ! uv run "$SCRAPER" "$target" "$snap" >&2; then
+    rm -rf "$snap"
+    fail "scrape failed for $target"
+  fi
+  write_manifest "$snap" "$target" "$kind"
 }
 
 case "$lane" in
@@ -83,33 +133,41 @@ case "$lane" in
     case "$verb" in
       capture)
         target="${3:?usage: career linkedin capture <profile-url-or-public-id>}"
-        curl -sf --max-time 3 http://localhost:9777/json/version >/dev/null 2>&1 \
-          || fail "no CDP Chrome on :9777 - launch your logged-in Chrome first (see tools/linkedin-scrape/README.md)"
-        snap="$ROOT/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-        mkdir -p "$snap"
-        if ! uv run "$SCRAPER" "$target" "$snap" >&2; then
-          rm -rf "$snap"
-          fail "scrape failed for $target"
-        fi
-        python3 - "$snap" "$target" <<'PY'
-import json, os, sys, datetime
-snap, target = sys.argv[1], sys.argv[2]
-pages = sorted(p for p in os.listdir(os.path.join(snap, "raw"))
-               if p.endswith(".txt")) if os.path.isdir(os.path.join(snap, "raw")) else []
-manifest = {
-    "target": target,
-    "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    "tool": "li-scrape",
-    "pages": pages,
-    "legacy": False,
-}
-with open(os.path.join(snap, "manifest.json"), "w") as f:
-    json.dump(manifest, f, indent=2)
-PY
+        case "$target" in */jobs/*) fail "that is a job post - use: career linkedin jd" ;; esac
+        scrape_to_store "$target" profile
         if [ "$json" = 1 ]; then
           emit true "$(python3 -c 'import json,sys; print(json.dumps({"snapshot": sys.argv[1]}))' "$snap")" -
         else
           echo "→ $snap"
+        fi
+        ;;
+
+      jd)
+        target="${3:?usage: career linkedin jd <jobs-view-url-or-job-id>}"
+        case "$target" in
+          */jobs/*) ;;
+          *) [[ "$target" =~ ^[0-9]{6,}$ ]] || fail "not a job post URL or id: $target" ;;
+        esac
+        scrape_to_store "$target" job
+        if [ "$json" = 1 ]; then
+          emit true "$(python3 -c 'import json,sys; print(json.dumps({"snapshot": sys.argv[1]}))' "$snap")" -
+        else
+          echo "→ $snap"
+        fi
+        ;;
+
+      keywords)
+        variant="${3:-baseline}"
+        mapfile -t jobsnaps < <(snapshots job)
+        [ "${#jobsnaps[@]}" -ge 1 ] || fail "no job snapshots for $client - run: career linkedin jd <jobs-url>"
+        cvargs=()
+        md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
+        [ -n "$md" ] && cvargs=(--cv "$md")
+        if [ "$json" = 1 ]; then
+          data="$(python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"} --json)" || fail "keyword aggregation failed"
+          emit true "$data" -
+        else
+          exec python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"}
         fi
         ;;
 

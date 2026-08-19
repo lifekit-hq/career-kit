@@ -17,6 +17,7 @@ GitHub issues.
 
 ```bash
 bin/career cv build|ats|match [...] [-c client] [--json]  # CV lane (delegates to bin/cv)
+bin/career cv lint [variant] [-c client]  # cross-check CV vs latest LinkedIn snapshot (exit 1 on mismatch)
 bin/career linkedin capture <url|id> [-c client]  # snapshot -> clients/<c>/captures/<ISO>/ (+manifest)
 bin/career linkedin diff [snapA snapB] [-c client]  # compare snapshots (default: two latest)
 bin/career linkedin audit [snapshot] [-c client]  # rubric-score a snapshot (default: latest)

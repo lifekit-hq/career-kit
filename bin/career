@@ -12,6 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRAPER="$ROOT/tools/linkedin-scrape/li-scrape.js"
 DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
+AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
 
 client="" json=0
 args=()
@@ -131,6 +132,21 @@ PY
           emit true "$data" -
         else
           exec python3 "$DIFFER" "$a" "$b"
+        fi
+        ;;
+
+      audit)
+        snap="${3:-}"
+        if [ -z "$snap" ]; then
+          snap="$(snapshots | head -1)"
+          [ -n "$snap" ] || fail "no snapshots for $client - run: career linkedin capture"
+        fi
+        [ -d "$snap" ] || fail "snapshot dir not found: $snap"
+        if [ "$json" = 1 ]; then
+          data="$(python3 "$AUDITOR" "$snap" --json)" || fail "audit failed"
+          emit true "$data" -
+        else
+          exec python3 "$AUDITOR" "$snap"
         fi
         ;;
 

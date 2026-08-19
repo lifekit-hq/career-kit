@@ -19,6 +19,7 @@ GitHub issues.
 bin/career cv build|ats|match [...] [-c client] [--json]  # CV lane (delegates to bin/cv)
 bin/career linkedin capture <url|id> [-c client]  # snapshot -> clients/<c>/captures/<ISO>/ (+manifest)
 bin/career linkedin diff [snapA snapB] [-c client]  # compare snapshots (default: two latest)
+bin/career linkedin audit [snapshot] [-c client]  # rubric-score a snapshot (default: latest)
 
 bin/cv build [variant] [-c client]   # back-compat alias: merge YAML + render -> PDF
 bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)

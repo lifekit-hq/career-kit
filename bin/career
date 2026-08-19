@@ -10,7 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCRAPER="$ROOT/tools/linkedin-scrape/li-scrape.js"
+SCRAPER="$ROOT/tools/linkedin-scrape/li_scrape.py"
 DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
 AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
 
@@ -85,15 +85,9 @@ case "$lane" in
         target="${3:?usage: career linkedin capture <profile-url-or-public-id>}"
         curl -sf --max-time 3 http://localhost:9777/json/version >/dev/null 2>&1 \
           || fail "no CDP Chrome on :9777 - launch your logged-in Chrome first (see tools/linkedin-scrape/README.md)"
-        if [ -z "${CHROME_BIN:-}" ]; then
-          CHROME_BIN="$(find "$HOME/.cache/puppeteer/chrome" "$HOME/.cache/ms-playwright" \
-            -name chrome -type f 2>/dev/null | head -1)"
-          [ -n "$CHROME_BIN" ] || CHROME_BIN=/usr/bin/google-chrome
-          export CHROME_BIN
-        fi
         snap="$ROOT/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
         mkdir -p "$snap"
-        if ! (cd "$ROOT/tools/linkedin-scrape" && node li-scrape.js "$target" "$snap" >&2); then
+        if ! uv run "$SCRAPER" "$target" "$snap" >&2; then
           rm -rf "$snap"
           fail "scrape failed for $target"
         fi

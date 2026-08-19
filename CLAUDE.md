@@ -28,11 +28,11 @@ uv run generate.py [variant] [-c client]  # merge only -> build/<client>/<varian
 ```
 
 `linkedin capture` needs the logged-in CDP Chrome from
-`tools/linkedin-scrape/README.md`. The LinkedIn lane is **read-only** — never
-automate writes to a LinkedIn account (contract hard rule). Diff tests:
-`python3 -m unittest discover -s tools/linkedin-diff`.
+`tools/linkedin-scrape/README.md` and also takes `/jobs/view/` URLs (job-post
+snapshots). The LinkedIn lane is **read-only** — never automate writes to a
+LinkedIn account (contract hard rule).
 
-`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). The CV engine has no test suite; the standalone `tools/` (e.g. `linkedin-scrape`) carry their own.
+`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). **Single stack: Python** (decided 2026-08-19) — every tool is Python (`uv` scripts; the scraper declares its `playwright` dep inline), with bash only as thin CLI glue (`bin/career`, `bin/cv`). The CV engine has no test suite; each `tools/linkedin-*` dir carries its own: `python3 -m unittest discover -s tools/<dir>`.
 
 ## Architecture
 

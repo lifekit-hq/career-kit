@@ -4,6 +4,9 @@
 `discover -s tools/<dir>` sweep - run it by name.)
 """
 import unittest
+from pathlib import Path
+
+import yaml
 
 import generate
 
@@ -117,6 +120,48 @@ class UnicodeHygiene(unittest.TestCase):
         cv = self.render(cfg_with_bullets("Owned 2024\u20132026 end to end."))
         self.assertEqual(cv["sections"]["Experience"][0]["highlights"],
                          ["Owned 2024\u20132026 end to end."])
+
+
+class ExampleProfileIsTheSchemaAnchor(unittest.TestCase):
+    """CLAUDE.md calls examples/profile.example.yml the committed schema and
+    fidelity anchor. It is the only profile CI can see - the clients/ tree is
+    private (PRIVATE.md) - so if it drifts, nothing notices. See #26."""
+
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parent
+        cls.path = root / "examples" / "profile.example.yml"
+        cls.raw = cls.path.read_text(encoding="utf-8")
+        cls.cfg = yaml.safe_load(cls.raw)
+        cls.design = yaml.safe_load((root / "data" / "design.yaml").read_text())
+
+    def test_it_still_builds(self):
+        # Also exercises every guard: a " - " bullet or a confusable in here
+        # raises, which is what makes CI's render job meaningful.
+        doc = generate.to_rendercv(generate.merge(self.cfg, {}), self.design)
+        self.assertTrue(doc["cv"]["sections"])
+
+    def test_every_variant_key_is_documented(self):
+        # A key a variant may override but the example never shows is a key
+        # nobody knows exists.
+        for key in generate.VARIANT_KEYS:
+            with self.subTest(key=key):
+                self.assertRegex(self.raw, rf"(?m)^#?\s*{key}:", msg=f"{key} undocumented")
+
+    def test_every_section_builder_is_demonstrated(self):
+        self.assertEqual(set(self.cfg["sections"]), set(generate.BUILDERS))
+
+    def test_every_experience_field_the_builder_reads_is_present(self):
+        for role in self.cfg["experience"]:
+            for field in generate.EXPERIENCE_FIELDS:
+                with self.subTest(role=role.get("key"), field=field):
+                    self.assertIn(field, role)
+
+    def test_it_is_still_fabricated(self):
+        # Committed file, public repo: a real profile pasted in here leaks an
+        # identity, which PRIVATE.md treats as the one unrecoverable mistake.
+        self.assertIn("Ada Lovelace", self.raw)
+        self.assertIn("example.com", self.raw)
 
 
 if __name__ == "__main__":

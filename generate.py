@@ -43,6 +43,16 @@ def default_client() -> str:
     return "denys-sychov"
 
 
+# Keys a variant may replace wholesale. Named here rather than inline so the
+# schema is introspectable - examples/profile.example.yml is held to this list.
+VARIANT_KEYS = ("name", "headline", "location", "summary", "contacts", "skills",
+                "skills_title", "projects", "education", "languages", "sections")
+
+# Fields _sec_experience reads off every role; a role missing one is a KeyError
+# at render time, so the example has to demonstrate all of them.
+EXPERIENCE_FIELDS = ("key", "title", "company", "start", "end", "location", "bullets")
+
+
 def merge(profile: dict, variant: dict) -> dict:
     """Overlay a variant onto the profile.
 
@@ -54,8 +64,7 @@ def merge(profile: dict, variant: dict) -> dict:
     cfg = copy.deepcopy(profile)
     v = variant or {}
 
-    for key in ("name", "headline", "location", "summary", "contacts", "skills",
-                "skills_title", "projects", "education", "languages", "sections"):
+    for key in VARIANT_KEYS:
         if key in v:
             cfg[key] = v[key]
 

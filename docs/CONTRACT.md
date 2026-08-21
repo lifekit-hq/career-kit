@@ -18,7 +18,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   |------|---------------------|-----------------|
   | `cv` | `build`, `ats`, `match`, `lint` | - |
   | `linkedin` | `capture`, `diff`, `audit`, `jd`, `keywords`, `benchmark` | - |
-  | `apply` | `add`, `list`, `set` | `followup` |
+  | `apply` | `add`, `list`, `set`, `followup` | - |
   | `portfolio` | - | (lane reserved) |
   | `strategy` | - | (lane reserved) |
 

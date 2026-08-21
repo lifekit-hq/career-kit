@@ -30,6 +30,7 @@ bin/career linkedin benchmark <snap-dir>...  # target model from reference-profi
 bin/career apply add <jd-snapshot> [--variant v] [-c client]  # record an application (company/role read from the capture)
 bin/career apply list [--status s] [-c client]  # the ledger
 bin/career apply set <id> --status sent|replied|interview|rejected|ghosted [--followup DATE]
+bin/career apply followup [--on DATE] [-c client]  # what is due to chase, most overdue first
 
 bin/cv build [variant] [-c client]   # back-compat alias: merge YAML + render -> PDF
 bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)

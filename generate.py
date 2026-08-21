@@ -34,13 +34,18 @@ BUILD = ROOT / "build"
 
 
 def default_client() -> str:
-    """The client used when none is given: clients/.default, else 'denys-sychov'."""
+    """The client used when none is given: whatever clients/.default names.
+
+    There is deliberately no fallback. Guessing a client silently builds a CV
+    for the wrong person, and a name baked in here would be a real identity in
+    a public repo - which PRIVATE.md forbids.
+    """
     marker = CLIENTS / ".default"
-    if marker.exists():
-        name = marker.read_text().strip()
-        if name:
-            return name
-    return "denys-sychov"
+    name = marker.read_text().strip() if marker.exists() else ""
+    if not name:
+        raise SystemExit(
+            "no client: pass -c <name>, or write one into clients/.default")
+    return name
 
 
 # Keys a variant may replace wholesale. Named here rather than inline so the

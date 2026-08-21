@@ -23,7 +23,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 set -- "${args[@]}"
-[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || echo denys-sychov)"
+[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || true)"
+# No fallback on purpose: a guessed client builds a CV for the wrong person,
+# and a name hardcoded here would be a real identity in a public repo.
+[ -n "$client" ] || { echo "no client: pass -c <name>, or write one into clients/.default" >&2; exit 2; }
 
 cmd="${1:-build}"
 variant="${2:-baseline}"

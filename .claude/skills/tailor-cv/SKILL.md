@@ -13,18 +13,21 @@ description: >-
 Orchestrates the career-kit loop: JD + facts → variant YAML → PDF → ATS check.
 The tool lives at `~/projects/career-kit`. **Edit data, never the template.**
 
-career-kit is multi-client. First fix the **client** (`-c <name>`, default
-`clients/.default` = `denys-sychov`). All that client's data lives under
-`clients/<client>/`.
+career-kit is multi-client. First fix the **client** (`-c <name>`, else
+whatever `clients/.default` names - with neither, commands refuse rather than
+guess). All that client's data lives under `clients/<client>/`, which is
+private: never name a client in a file that gets committed.
 
 ## Inputs
 - A target: company + role, and ideally the JD text (save it to a file for `match`).
 - Ground truth (the honest-framing constraints — read BEFORE drafting):
-  - **Denys** (`denys-sychov`): `~/memory/domains/career.md` (targets, what NOT to
-    claim), `identity.md`, `engineering.md`. **Read career.md first** — e.g. SS&C is
-    mostly frontend + a .NET proxy API; do NOT frame it as privacy-engineering work
-    (fabrication the work-trial would expose).
-  - **Other clients**: `clients/<client>/docs/` (intake.md, strategy.md) and their
+  - **The vault-backed client**: `~/memory/domains/career.md` (targets, and the
+    hard list of what NOT to claim), plus `identity.md` and `engineering.md`.
+    **Read career.md first** - it names the specific employers and technologies
+    that must not be reframed, because that is exactly the fabrication a work
+    trial exposes. Those constraints live in the vault, never here: this file is
+    committed to a public repo.
+  - **Every client**: `clients/<client>/docs/` (intake.md, strategy.md) and their
     `captures/` (scraped LinkedIn). Never claim beyond what those support.
 
 ## Steps

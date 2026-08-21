@@ -45,6 +45,22 @@ class EveryVerbAnswersWithAnEnvelope(unittest.TestCase):
     """Failure is the path most likely to skip the envelope, so test it for all
     of them - a verb that dies via bash `${n:?...}` never reaches emit()."""
 
+    # A throwaway client, so the missing-argument tests reach the argument check
+    # instead of stopping at require_client_dir. Without one the suite passes
+    # locally (a real clients/ tree exists) and fails in CI, where it does not.
+    TMP_CLIENT = "__envelope_test__"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cdir = ROOT / "clients" / cls.TMP_CLIENT
+        cls.cdir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(ROOT / "examples" / "profile.example.yml",
+                    cls.cdir / "profile.yml")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.cdir, ignore_errors=True)
+
     def test_error_paths_are_parseable_envelopes(self):
         for lane, verb, extra in VERBS:
             with self.subTest(verb=f"{lane} {verb}"):
@@ -72,7 +88,7 @@ class EveryVerbAnswersWithAnEnvelope(unittest.TestCase):
         # capture/jd used bash `${3:?usage}`, which exits without reaching emit.
         for verb in ("capture", "jd"):
             with self.subTest(verb=verb):
-                p = run("linkedin", verb, "--json")
+                p = run("linkedin", verb, "-c", self.TMP_CLIENT, "--json")
                 self.assertIn("usage", json.loads(p.stdout)["error"]["message"])
                 self.assertEqual(p.returncode, 2)
 

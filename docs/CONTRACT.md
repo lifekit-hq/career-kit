@@ -22,6 +22,12 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   | `portfolio` | - | (lane reserved) |
   | `strategy` | - | (lane reserved) |
 
+- `career doctor` is the one command outside the lane grammar: it reports what
+  a verb needs (python, uv/uvx, the CDP Chrome the linkedin lane drives, the
+  client, the shared design) **before** the verb needs it. It answers with the
+  envelope as `lane: doctor, verb: check`; exit 1 means at least one failure,
+  and a warning alone is exit 0.
+
 - **verb** - one precise chunk of work with a defined result. A verb never
   grows modes; a new behavior is a new verb.
 - **client** - resolved from `-c`, else `clients/.default`. Every command

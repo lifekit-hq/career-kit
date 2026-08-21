@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 career-kit is a **multi-client, end-to-end career workbench**: research → strategy → optimized LinkedIn → ATS-ready CV, general enough to serve any person. Its CV engine is YAML-driven — one source of truth for facts per client, per-role framing layered on top — delegating rendering to [RenderCV](https://github.com/rendercv/rendercv) (invoked via `uvx`, not installed globally). It is a local tool/skill, not a deployed service. Part of the lifekit ecosystem.
 
-Each person is a **client** under `clients/<name>/` (e.g. `clients/denys-sychov/`, `clients/yelyzaveta-morozova/`). The whole `clients/` tree is private (see the privacy split below).
+Each person is a **client** under `clients/<name>/` (e.g. `clients/ada-lovelace/`). The whole `clients/` tree is private (see the privacy split below) - **real client names never appear in a committed file**, this one included; the repo is public.
 
 ## Commands
 
@@ -45,7 +45,7 @@ uv run generate.py [variant] [-c client]  # merge only -> build/<client>/<varian
 snapshots). The LinkedIn lane is **read-only** — never automate writes to a
 LinkedIn account (contract hard rule).
 
-`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). **Single stack: Python** (decided 2026-08-19) — every tool is Python (`uv` scripts; the scraper declares its `playwright` dep inline), with bash only as thin CLI glue (`bin/career`, `bin/cv`). Each `tools/<dir>` carries its own tests (`python3 -m unittest discover -s tools/<dir>`); the CV engine's live beside it at the repo root (`python3 -m unittest test_generate`).
+`variant` defaults to `baseline`; `client` defaults to whatever `clients/.default` names; with no `-c` and no `.default`, commands refuse rather than guess. Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). **Single stack: Python** (decided 2026-08-19) — every tool is Python (`uv` scripts; the scraper declares its `playwright` dep inline), with bash only as thin CLI glue (`bin/career`, `bin/cv`). Each `tools/<dir>` carries its own tests (`python3 -m unittest discover -s tools/<dir>`); the CV engine's live beside it at the repo root (`python3 -m unittest test_generate`).
 
 ## Architecture
 

@@ -16,10 +16,10 @@ def fixture(name):
 class HelpersTest(unittest.TestCase):
     def test_parse_public_id(self):
         self.assertEqual(
-            h.parse_public_id("https://www.linkedin.com/in/yelyzaveta-morozova-496272408/"),
-            "yelyzaveta-morozova-496272408")
-        self.assertEqual(h.parse_public_id("yelyzaveta-morozova-496272408"),
-                         "yelyzaveta-morozova-496272408")
+            h.parse_public_id("https://www.linkedin.com/in/ada-lovelace-000000000/"),
+            "ada-lovelace-000000000")
+        self.assertEqual(h.parse_public_id("ada-lovelace-000000000"),
+                         "ada-lovelace-000000000")
         self.assertEqual(
             h.parse_public_id("https://www.linkedin.com/in/foo-bar/details/skills/"), "foo-bar")
         self.assertEqual(h.parse_public_id("https://www.linkedin.com/in/foo?utm=x#y"), "foo")

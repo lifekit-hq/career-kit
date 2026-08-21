@@ -80,7 +80,7 @@ class LiAuditTest(unittest.TestCase):
 
     def test_vanity_slug_detection(self):
         snap = self.root / "s"
-        make_snapshot(snap, {"profile": "x"}, manifest={"target": "jane-doe-496272408"})
+        make_snapshot(snap, {"profile": "x"}, manifest={"target": "jane-doe-000000000"})
         report = li_audit.audit(snap)
         detail = next(r["detail"] for r in report["checks"] if r["id"] == "vanity_url")
         self.assertIn("unclaimed", detail)

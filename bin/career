@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 set -- "${args[@]+"${args[@]}"}"
-[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || echo denys-sychov)"
+[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || true)"
 
 lane="${1:-}"; verb="${2:-}"
 
@@ -64,6 +64,13 @@ PY
 # with the envelope - an error that skips it breaks every --json caller.
 fail() { emit false null "$1"; }
 usage_fail() { emit false null "$1" 2; }
+
+# Resolved above, refused here - usage_fail needs emit, and emit needs lane/verb.
+# No fallback on purpose: a guessed client builds a CV for the wrong person, and
+# a name hardcoded here would be a real identity in a public repo (PRIVATE.md).
+# `doctor` is exempt: reporting a missing default is precisely its job.
+[ "$lane" = doctor ] || [ -n "$client" ] || \
+  usage_fail "no client: pass -c <name>, or write one into clients/.default"
 
 require_client_dir() {
   [ -d "$ROOT/clients/$client" ] || usage_fail "unknown client: $client"
@@ -173,12 +180,14 @@ case "$lane" in
     # verb is run, so it cannot itself require the things it is checking for.
     verb="check"
     if [ "$json" = 1 ]; then
-      if data="$(python3 "$DOCTOR" "$ROOT" --client "$client" --json)"; then rc=0; else rc=$?; fi
+      dargs=(); [ -n "$client" ] && dargs=(--client "$client")
+      if data="$(python3 "$DOCTOR" "$ROOT" ${dargs[0]:+"${dargs[@]}"} --json)"; then rc=0; else rc=$?; fi
       [ "$rc" -le 1 ] || fail "doctor failed to run"
       emit true "$data" -
       exit "$rc"
     else
-      exec python3 "$DOCTOR" "$ROOT" --client "$client"
+      dargs=(); [ -n "$client" ] && dargs=(--client "$client")
+      exec python3 "$DOCTOR" "$ROOT" ${dargs[0]:+"${dargs[@]}"}
     fi
     ;;
 

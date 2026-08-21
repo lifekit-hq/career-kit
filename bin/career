@@ -35,11 +35,11 @@ set -- "${args[@]+"${args[@]}"}"
 
 lane="${1:-}"; verb="${2:-}"
 
-usage() { echo "usage: career {cv|linkedin} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)" >&2; exit 2; }
+usage() { usage_fail "usage: career {cv|linkedin} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)"; }
 
 # emit <ok> <data-json|null> <error-message|-> ; then exit accordingly.
 emit() {
-  local ok="$1" data="$2" err="$3"
+  local ok="$1" data="$2" err="$3" code="${4:-1}"
   if [ "$json" = 1 ]; then
     python3 - "$ok" "$lane" "$verb" "$client" "$data" "$err" <<'PY'
 import json, sys
@@ -53,13 +53,16 @@ PY
   elif [ "$err" != "-" ]; then
     echo "error: $err" >&2
   fi
-  [ "$ok" = true ] || exit 1
+  [ "$ok" = true ] || exit "$code"
 }
 
+# Two failure kinds, per CONTRACT.md: 1 = operational, 2 = usage. Both answer
+# with the envelope - an error that skips it breaks every --json caller.
 fail() { emit false null "$1"; }
+usage_fail() { emit false null "$1" 2; }
 
 require_client_dir() {
-  [ -d "$ROOT/clients/$client" ] || { echo "unknown client: $client" >&2; exit 2; }
+  [ -d "$ROOT/clients/$client" ] || usage_fail "unknown client: $client"
 }
 
 # Newest-first snapshot dirs of one kind (a snapshot = a dir with manifest.json;
@@ -117,8 +120,8 @@ scrape_to_store() {
 
 case "$lane" in
   cv)
+    require_client_dir           # every cv verb needs clients/<client>/profile.yml
     if [ "$verb" = lint ]; then
-      require_client_dir
       variant="${3:-baseline}"
       snap="$(snapshots profile | head -1)"
       [ -n "$snap" ] || fail "no profile snapshots for $client - run: career linkedin capture"
@@ -138,21 +141,36 @@ case "$lane" in
       *) usage ;;
     esac
     shift 2 || true
-    if [ "$json" = 1 ] && [ "$verb" = build ]; then
-      out="$("$ROOT/bin/cv" "$verb" "$@" -c "$client")" || fail "cv build failed"
-      pdf="${out#→ }"
-      emit true "$(python3 -c 'import json,sys; print(json.dumps({"pdf": sys.argv[1]}))' "$pdf")" -
-    else
-      exec "$ROOT/bin/cv" "$verb" "$@" -c "$client"   # text verbs pass through
+    if [ "$json" = 0 ]; then
+      exec "$ROOT/bin/cv" "$verb" "$@" -c "$client"   # text mode passes through
     fi
+    # --json is a contract, not a per-verb courtesy: every verb below answers
+    # with the envelope. bin/cv stays text-only; the shaping happens here.
+    out="$("$ROOT/bin/cv" "$verb" "$@" -c "$client")" || fail "cv $verb failed"
+    case "$verb" in
+      build)
+        pdf="${out#→ }"
+        emit true "$(python3 -c 'import json,sys; print(json.dumps({"pdf": sys.argv[1]}))' "$pdf")" -
+        ;;
+      ats)
+        emit true "$(printf '%s' "$out" | python3 -c \
+          'import json,sys; print(json.dumps({"markdown": sys.stdin.read()}))')" -
+        ;;
+      match)
+        # bin/cv prints a header then "  - <word>" per missing keyword.
+        emit true "$(printf '%s\n' "$out" | python3 -c \
+          'import json,sys; print(json.dumps({"missing": [l[4:].rstrip("\n") for l in sys.stdin if l.startswith("  - ")]}))')" -
+        ;;
+    esac
     ;;
 
   linkedin)
     require_client_dir
     case "$verb" in
       capture)
-        target="${3:?usage: career linkedin capture <profile-url-or-public-id>}"
-        case "$target" in */jobs/*) fail "that is a job post - use: career linkedin jd" ;; esac
+        target="${3:-}"
+        [ -n "$target" ] || usage_fail "usage: career linkedin capture <profile-url-or-public-id>"
+        case "$target" in */jobs/*) usage_fail "that is a job post - use: career linkedin jd" ;; esac
         scrape_to_store "$target" profile
         if [ "$json" = 1 ]; then
           emit true "$(python3 -c 'import json,sys; print(json.dumps({"snapshot": sys.argv[1]}))' "$snap")" -
@@ -162,10 +180,11 @@ case "$lane" in
         ;;
 
       jd)
-        target="${3:?usage: career linkedin jd <jobs-view-url-or-job-id>}"
+        target="${3:-}"
+        [ -n "$target" ] || usage_fail "usage: career linkedin jd <jobs-view-url-or-job-id>"
         case "$target" in
           */jobs/*) ;;
-          *) [[ "$target" =~ ^[0-9]{6,}$ ]] || fail "not a job post URL or id: $target" ;;
+          *) [[ "$target" =~ ^[0-9]{6,}$ ]] || usage_fail "not a job post URL or id: $target" ;;
         esac
         scrape_to_store "$target" job
         if [ "$json" = 1 ]; then
@@ -177,7 +196,7 @@ case "$lane" in
 
       benchmark)
         shift 2 || true
-        [ $# -ge 1 ] || fail "usage: career linkedin benchmark <snapshot-dir>... (reference captures live in ad-hoc out-dirs, not client dirs)"
+        [ $# -ge 1 ] || usage_fail "usage: career linkedin benchmark <snapshot-dir>... (reference captures live in ad-hoc out-dirs, not client dirs)"
         if [ "$json" = 1 ]; then
           data="$(python3 "$BENCH" "$@" --json)" || fail "benchmark failed"
           emit true "$data" -

@@ -140,6 +140,12 @@ def scaffold(cfg: dict, job: dict, sig: dict) -> str:
 
 
 def build(profile_path: Path, snap: Path, variant_path=None, cv_md=None) -> dict:
+    # Same forms `career apply add` accepts: the path `linkedin jd` printed, one
+    # relative to the client dir, or the bare capture timestamp. Two verbs that
+    # take the same argument should not disagree about what it may look like.
+    client_dir = profile_path.parent
+    snap = next((c for c in (snap, client_dir / snap, client_dir / "captures" / snap)
+                 if c.is_dir()), snap)
     job = jd_intel.load_job(snap)
     if not job:
         raise Usage(f"{snap} has no readable job.json - is it a job capture? "

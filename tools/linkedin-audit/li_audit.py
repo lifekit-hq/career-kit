@@ -229,6 +229,21 @@ def main(argv: list[str]) -> int:
     if not snap.is_dir():
         print(f"not a snapshot dir: {snap}", file=sys.stderr)
         return 1
+    # A rubric built for a profile will happily score a job post 1/5 and list
+    # five confident "fixes" for it. `career linkedin capture` already refuses
+    # this mixup; the manifest records `kind`, so refuse it here too.
+    s = load(snap)
+    kind = s["manifest"].get("kind", "profile")
+    if kind != "profile":
+        print(f"{snap} is a {kind} snapshot, not a profile - try: "
+              "career linkedin keywords", file=sys.stderr)
+        return 2
+    # Scoring a capture that holds no profile text is not a low score, it is a
+    # missing input: every check fails for want of evidence, not for cause.
+    if not any(s["sections"].values()) and not s["structured"]:
+        print(f"{snap} has no readable profile text - recapture it "
+              "(career linkedin capture <url>)", file=sys.stderr)
+        return 1
     report = audit(snap, keywords)
     print(json.dumps(report) if as_json else to_markdown(report))
     return 0

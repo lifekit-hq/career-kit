@@ -19,7 +19,7 @@ contacts:
 
 # Default section order. Variants may override; known sections:
 # profile | experience | projects | skills | education | languages
-sections: [profile, experience, skills, education, languages]
+sections: [profile, experience, projects, skills, education, languages]
 
 summary: >-
   Engineer with N years building reliable services. One or two sentences on

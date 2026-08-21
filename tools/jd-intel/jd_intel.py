@@ -58,8 +58,12 @@ def load_job(snap: Path) -> dict | None:
 
 
 def job_text(job: dict) -> str:
-    return " ".join(filter(None, [job.get("title") or ""]
-                           + list(job.get("description") or [])))
+    # description is a list of lines in li-scrape-job/1, but a plain string
+    # would otherwise be list()-ed into single characters and silently drop
+    # every keyword - zero output, no error.
+    desc = job.get("description") or []
+    lines = [desc] if isinstance(desc, str) else list(desc)
+    return " ".join(filter(None, [job.get("title") or ""] + lines))
 
 
 def aggregate(jobs: list[dict], cv_text: str | None = None) -> dict:

@@ -72,5 +72,24 @@ class JdIntelTest(unittest.TestCase):
         self.assertIsNone(jd_intel.load_job(self.root))
 
 
+
+class JobTextShape(unittest.TestCase):
+    """description is a list of lines in li-scrape-job/1, but a string must not
+    silently degrade to zero keywords - list("abc") is three 1-char tokens, all
+    of which the tokenizer then drops. See #21."""
+
+    def test_a_list_description_is_read(self):
+        self.assertIn("kubernetes", jd_intel.tokens(
+            jd_intel.job_text({"title": "Eng", "description": ["Kubernetes here"]})))
+
+    def test_a_string_description_is_read_too(self):
+        self.assertIn("kubernetes", jd_intel.tokens(
+            jd_intel.job_text({"title": "Eng", "description": "Kubernetes here"})))
+
+    def test_a_missing_description_still_yields_the_title(self):
+        self.assertIn("engineer", jd_intel.tokens(
+            jd_intel.job_text({"title": "Engineer"})))
+
+
 if __name__ == "__main__":
     unittest.main()

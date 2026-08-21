@@ -67,6 +67,26 @@ PY
 fail() { emit false null "$1"; }
 usage_fail() { emit false null "$1" 2; }
 
+# Run a tool and shape its stdout into the envelope, keeping the tool's OWN
+# message and its usage(2)/operational(1) split. A generic "<verb> failed"
+# inside a valid envelope is worse than no envelope: it looks like an answer.
+emit_tool() {
+  local errf data code msg
+  errf="$(mktemp)"
+  # $? must be read inside the else: after `if cmd; then ...; fi` with no
+  # branch taken, $? is the if-statement's own status (0), not the command's.
+  if data="$("$@" --json 2>"$errf")"; then
+    rm -f "$errf"
+    emit true "$data" -
+    exit 0
+  else
+    code=$?
+  fi
+  msg="$(cat "$errf")"; rm -f "$errf"
+  [ "$code" = 2 ] && usage_fail "${msg:-$verb: bad arguments}"
+  fail "${msg:-$verb failed}"
+}
+
 # Resolved above, refused here - usage_fail needs emit, and emit needs lane/verb.
 # No fallback on purpose: a guessed client builds a CV for the wrong person, and
 # a name hardcoded here would be a real identity in a public repo (PRIVATE.md).
@@ -164,14 +184,7 @@ case "$lane" in
       md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
       [ -n "$md" ] && largs+=(--cv "$md")
       if [ "$json" = 1 ]; then
-        errf="$(mktemp)"
-        if data="$(python3 "$LETTER" "${largs[@]}" --json 2>"$errf")"; then
-          rm -f "$errf"; emit true "$data" -; exit 0
-        else
-          code=$?; msg="$(cat "$errf")"; rm -f "$errf"
-          [ "$code" = 2 ] && usage_fail "${msg:-cv letter: bad arguments}"
-          fail "${msg:-cv letter failed}"
-        fi
+        emit_tool python3 "$LETTER" "${largs[@]}"
       else
         exec python3 "$LETTER" "${largs[@]}"
       fi
@@ -231,17 +244,7 @@ case "$lane" in
     # that knows how a client is resolved.
     cargs=("$ROOT/clients/$client")
     if [ "$json" = 1 ]; then
-      # Keep the tool's own message: a generic "apply add failed" in the
-      # envelope is worse than no envelope, because it looks like an answer.
-      errf="$(mktemp)"
-      if data="$(python3 "$APPLY" "$verb" "${cargs[@]}" "$@" --json 2>"$errf")"; then
-        rm -f "$errf"
-        emit true "$data" -
-      else
-        code=$?; msg="$(cat "$errf")"; rm -f "$errf"
-        [ "$code" = 2 ] && usage_fail "${msg:-apply $verb: bad arguments}"
-        fail "${msg:-apply $verb failed}"
-      fi
+      emit_tool python3 "$APPLY" "$verb" "${cargs[@]}" "$@"
     else
       exec python3 "$APPLY" "$verb" "${cargs[@]}" "$@"
     fi
@@ -281,8 +284,7 @@ case "$lane" in
         shift 2 || true
         [ $# -ge 1 ] || usage_fail "usage: career linkedin benchmark <snapshot-dir>... (reference captures live in ad-hoc out-dirs, not client dirs)"
         if [ "$json" = 1 ]; then
-          data="$(python3 "$BENCH" "$@" --json)" || fail "benchmark failed"
-          emit true "$data" -
+          emit_tool python3 "$BENCH" "$@"
         else
           exec python3 "$BENCH" "$@"
         fi
@@ -296,8 +298,7 @@ case "$lane" in
         md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
         [ -n "$md" ] && cvargs=(--cv "$md")
         if [ "$json" = 1 ]; then
-          data="$(python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"} --json)" || fail "keyword aggregation failed"
-          emit true "$data" -
+          emit_tool python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"}
         else
           exec python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"}
         fi
@@ -312,8 +313,7 @@ case "$lane" in
         fi
         [ -d "$a" ] && [ -d "$b" ] || fail "snapshot dir not found: $a / $b"
         if [ "$json" = 1 ]; then
-          data="$(python3 "$DIFFER" "$a" "$b" --json)" || fail "diff failed"
-          emit true "$data" -
+          emit_tool python3 "$DIFFER" "$a" "$b"
         else
           exec python3 "$DIFFER" "$a" "$b"
         fi
@@ -327,8 +327,7 @@ case "$lane" in
         fi
         [ -d "$snap" ] || fail "snapshot dir not found: $snap"
         if [ "$json" = 1 ]; then
-          data="$(python3 "$AUDITOR" "$snap" --json)" || fail "audit failed"
-          emit true "$data" -
+          emit_tool python3 "$AUDITOR" "$snap"
         else
           exec python3 "$AUDITOR" "$snap"
         fi

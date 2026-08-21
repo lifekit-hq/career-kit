@@ -68,5 +68,56 @@ class Merge(unittest.TestCase):
             generate.merge(CFG, {"experience_order": ["nope"]})
 
 
+class UnicodeHygiene(unittest.TestCase):
+    """Invisible controls and exotic spaces reach the PDF and the ATS Markdown
+    unseen; a non-Latin lookalike makes a keyword unmatchable. See #18."""
+
+    def render(self, cfg):
+        return generate.to_rendercv(cfg, {})["cv"]
+
+    def test_zero_width_and_soft_hyphen_are_stripped(self):
+        cv = self.render(cfg_with_bullets("Grew\u200b the chan\u00adnels."))
+        self.assertEqual(cv["sections"]["Experience"][0]["highlights"],
+                         ["Grew the channels."])
+
+    def test_bom_and_bidi_controls_are_stripped_from_any_field(self):
+        cv = self.render(dict(CFG, headline="\ufeffSocial\u202e Media Manager"))
+        self.assertEqual(cv["headline"], "Social Media Manager")
+
+    def test_exotic_spaces_fold_to_u0020(self):
+        cv = self.render(cfg_with_bullets("Ran\u00a0the\u2009channels\u202fdaily."))
+        self.assertEqual(cv["sections"]["Experience"][0]["highlights"],
+                         ["Ran the channels daily."])
+
+    def test_nbsp_wrapped_separator_still_trips_the_bullet_check(self):
+        # The fold has to run first, or #15's check never sees a plain " - ".
+        with self.assertRaises(SystemExit) as ctx:
+            self.render(cfg_with_bullets("Ran the channels\u00a0-\u00a0daily."))
+        # Reported with the NBSPs already folded, i.e. as the text RenderCV sees.
+        self.assertIn("Ran the channels - daily.", str(ctx.exception))
+
+    def test_cyrillic_lookalike_is_a_hard_error_naming_the_codepoint(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.render(dict(CFG, headline="Social Media M\u0430nager"))
+        msg = str(ctx.exception)
+        self.assertIn("U+0430", msg)
+        self.assertIn("cv.headline", msg)
+
+    def test_fullwidth_latin_is_rejected_too(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.render(cfg_with_bullets("Owned \uff34ikTok end to end."))
+        self.assertIn("U+FF34", str(ctx.exception))
+
+    def test_every_offending_field_is_listed(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.render(dict(CFG, headline="M\u0430nager", summary="\u0435ditor"))
+        self.assertIn("2 field(s)", str(ctx.exception))
+
+    def test_plain_ascii_and_en_dash_are_left_alone(self):
+        cv = self.render(cfg_with_bullets("Owned 2024\u20132026 end to end."))
+        self.assertEqual(cv["sections"]["Experience"][0]["highlights"],
+                         ["Owned 2024\u20132026 end to end."])
+
+
 if __name__ == "__main__":
     unittest.main()

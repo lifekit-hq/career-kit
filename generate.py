@@ -22,6 +22,7 @@ Design contract (per client, under clients/<client>/):
 """
 import argparse
 import copy
+import unicodedata
 from pathlib import Path
 
 import yaml
@@ -162,6 +163,82 @@ BUILDERS = {
 }
 
 
+# Model-drafted YAML carries Unicode that is invisible in the editor and broken
+# in the output: zero-width and bidi controls, and spaces that are not U+0020.
+# An NBSP is not a word boundary to a naive ATS tokenizer, and a Cyrillic "a"
+# inside "Manager" makes that keyword unmatchable - by the recruiter's parser and
+# by `career cv match` alike, since both read the same text. See #18.
+# Tables borrowed from watermarks-remover (MIT, guillaumemeyer), Layer A only.
+STRIP_CODEPOINTS = frozenset(
+    {0x00AD, 0x034F, 0x061C, 0x115F, 0x1160, 0x17B4, 0x17B5, 0x180B, 0x180C,
+     0x180D, 0x180E, 0x180F, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x202A,
+     0x202B, 0x202C, 0x202D, 0x202E, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064,
+     0x2066, 0x2067, 0x2068, 0x2069, 0x206A, 0x206B, 0x206C, 0x206D, 0x206E,
+     0x206F, 0x3164, 0xFEFF, 0xFFA0, 0xFFF9, 0xFFFA, 0xFFFB}
+    | set(range(0xFE00, 0xFE10))            # variation selectors VS1-VS16
+)
+
+# Everything that looks like a space but is not one. Folding is meaning-
+# preserving, so it happens silently rather than failing the build.
+SPACE_HOMOGLYPHS = {cp: " " for cp in
+                    (0x00A0, 0x1680, *range(0x2000, 0x200B), 0x202F, 0x205F,
+                     0x3000)}
+
+# Non-Latin letters that render as Latin ones. Never folded: substituting would
+# quietly rewrite what the CV says, so the author is told instead.
+CONFUSABLES = {
+    0x0410: "A", 0x0412: "B", 0x0415: "E", 0x041A: "K", 0x041C: "M",
+    0x041D: "H", 0x041E: "O", 0x0420: "P", 0x0421: "C", 0x0422: "T",
+    0x0425: "X", 0x0430: "a", 0x0435: "e", 0x043E: "o", 0x0440: "p",
+    0x0441: "c", 0x0443: "y", 0x0445: "x", 0x0456: "i",
+}
+CONFUSABLES.update({cp: chr(cp - 0xFEE0)    # fullwidth Latin
+                    for cp in (*range(0xFF21, 0xFF3B), *range(0xFF41, 0xFF5B))})
+
+_FOLD = {**{cp: None for cp in STRIP_CODEPOINTS}, **SPACE_HOMOGLYPHS}
+
+
+def _fold_unicode(node):
+    """Delete invisible controls and fold exotic spaces to U+0020, recursively."""
+    if isinstance(node, str):
+        return node.translate(_FOLD)
+    if isinstance(node, dict):
+        return {k: _fold_unicode(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_fold_unicode(v) for v in node]
+    return node
+
+
+def _confusables(node, path="cv"):
+    """Yield (path, text, offending chars) for every string holding a lookalike."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _confusables(v, f"{path}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _confusables(v, f"{path}[{i}]")
+    elif isinstance(node, str):
+        hits = sorted({ch for ch in node if ord(ch) in CONFUSABLES})
+        if hits:
+            yield path, node, hits
+
+
+def _check_confusables(cv: dict) -> None:
+    bad = list(_confusables(cv))
+    if not bad:
+        return
+    listing = "\n".join(
+        "  [{}] {}\n      {}".format(path, text, ", ".join(
+            f"U+{ord(c):04X} {unicodedata.name(c, '?')} -> {CONFUSABLES[ord(c)]!r}"
+            for c in hits))
+        for path, text, hits in bad)
+    raise SystemExit(
+        f"{len(bad)} field(s) contain a non-Latin lookalike character. An ATS "
+        "keyword search never matches these, and `career cv match` cannot see "
+        "it either - it reads the same text.\nRetype the word in plain ASCII:\n"
+        + listing)
+
+
 # RenderCV renders each highlight as a Markdown list item, so a " - " *inside*
 # one is parsed as a new list item and the bullet silently becomes two - in the
 # PDF and in the ATS Markdown alike. Caught here rather than documented, because
@@ -194,8 +271,12 @@ def to_rendercv(cfg: dict, design: dict) -> dict:
         title, entries = BUILDERS[name](cfg)
         if entries:
             sections[title] = entries
-    _check_highlights(sections)
     cv["sections"] = sections
+    # Fold before the check below: an NBSP-wrapped separator has to reach it as
+    # a plain " - " to be caught at all.
+    cv = _fold_unicode(cv)
+    _check_confusables(cv)
+    _check_highlights(cv["sections"])
     return {"cv": cv, "design": design, "locale": {"language": "english"}}
 
 

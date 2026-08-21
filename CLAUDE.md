@@ -71,6 +71,12 @@ To add a new section type, add a builder to `BUILDERS` and reference its name in
   item and splits that bullet into two, in the rendered PDF *and* in the ATS Markdown. Use a comma,
   a semicolon, or a rewrite instead. The same string is fine in `summary` and in `location`, which
   are not list items. `generate.py` enforces this and fails the build naming the offending bullets.
+- **Keep CV text plain ASCII.** `generate.py` silently deletes invisible controls
+  (zero-width, bidi, soft hyphen, variation selectors) and folds exotic spaces (NBSP,
+  thin, narrow-NBSP) to `U+0020` across every rendered field, then **hard-errors** on a
+  non-Latin lookalike (Cyrillic `а` in "Manager", fullwidth `Ａ`) - an ATS keyword
+  search never matches those, and `career cv match` cannot see the problem either since
+  it reads the same text. Model-drafted YAML is where they come from; retype the word.
 - To restyle everything, edit `data/design.yaml` (shared); for one client only, add `clients/<client>/design.yaml`. Full option list: `uvx --from "rendercv[full]" rendercv new "x" --theme sb2nov`.
 
 ## Code/data privacy split

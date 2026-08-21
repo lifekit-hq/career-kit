@@ -3,6 +3,7 @@
 # Contract (taxonomy, JSON envelope, exit codes): docs/CONTRACT.md
 #
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
+#   career apply add|list|set [...]           application ledger
 #   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
 #   career linkedin capture <url|public-id>   snapshot a profile into the store
 #   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
@@ -20,6 +21,7 @@ AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
 JDINTEL="$ROOT/tools/jd-intel/jd_intel.py"
 LINTER="$ROOT/tools/career-lint/career_lint.py"
 BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
+APPLY="$ROOT/tools/career-apply/career_apply.py"
 
 client="" json=0
 args=()
@@ -35,7 +37,7 @@ set -- "${args[@]+"${args[@]}"}"
 
 lane="${1:-}"; verb="${2:-}"
 
-usage() { usage_fail "usage: career {cv|linkedin} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)"; }
+usage() { usage_fail "usage: career {cv|linkedin|apply} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)"; }
 
 # emit <ok> <data-json|null> <error-message|-> ; then exit accordingly.
 emit() {
@@ -162,6 +164,33 @@ case "$lane" in
           'import json,sys; print(json.dumps({"missing": [l[4:].rstrip("\n") for l in sys.stdin if l.startswith("  - ")]}))')" -
         ;;
     esac
+    ;;
+
+  apply)
+    require_client_dir
+    case "$verb" in
+      add|list|set) ;;
+      *) usage ;;
+    esac
+    shift 2 || true
+    # The ledger tool takes the client dir, so bin/career stays the only place
+    # that knows how a client is resolved.
+    cargs=("$ROOT/clients/$client")
+    if [ "$json" = 1 ]; then
+      # Keep the tool's own message: a generic "apply add failed" in the
+      # envelope is worse than no envelope, because it looks like an answer.
+      errf="$(mktemp)"
+      if data="$(python3 "$APPLY" "$verb" "${cargs[@]}" "$@" --json 2>"$errf")"; then
+        rm -f "$errf"
+        emit true "$data" -
+      else
+        code=$?; msg="$(cat "$errf")"; rm -f "$errf"
+        [ "$code" = 2 ] && usage_fail "${msg:-apply $verb: bad arguments}"
+        fail "${msg:-apply $verb failed}"
+      fi
+    else
+      exec python3 "$APPLY" "$verb" "${cargs[@]}" "$@"
+    fi
     ;;
 
   linkedin)

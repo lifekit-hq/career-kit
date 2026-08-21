@@ -18,6 +18,8 @@ GitHub issues.
 ```bash
 bin/career cv build|ats|match [...] [-c client] [--json]  # CV lane (delegates to bin/cv)
 bin/career cv lint [variant] [-c client]  # cross-check CV vs latest LinkedIn snapshot (exit 1 on mismatch)
+                                          # headline: the role noun (before the first '|') must match;
+                                          # a variant may tailor the modifiers after it (warn, not fail)
 bin/career linkedin capture <url|id> [-c client]  # snapshot -> clients/<c>/captures/<ISO>/ (+manifest)
 bin/career linkedin diff [snapA snapB] [-c client]  # compare snapshots (default: two latest)
 bin/career linkedin audit [snapshot] [-c client]  # rubric-score a snapshot (default: latest)
@@ -36,7 +38,7 @@ uv run generate.py [variant] [-c client]  # merge only -> build/<client>/<varian
 snapshots). The LinkedIn lane is **read-only** — never automate writes to a
 LinkedIn account (contract hard rule).
 
-`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). **Single stack: Python** (decided 2026-08-19) — every tool is Python (`uv` scripts; the scraper declares its `playwright` dep inline), with bash only as thin CLI glue (`bin/career`, `bin/cv`). The CV engine has no test suite; each `tools/linkedin-*` dir carries its own: `python3 -m unittest discover -s tools/<dir>`.
+`variant` defaults to `baseline`; `client` defaults to `clients/.default` (currently `denys-sychov`). Requires [`uv`](https://docs.astral.sh/uv/); RenderCV self-fetches via `uvx --from "rendercv[full]" rendercv` on first run (needs internet once). **Single stack: Python** (decided 2026-08-19) — every tool is Python (`uv` scripts; the scraper declares its `playwright` dep inline), with bash only as thin CLI glue (`bin/career`, `bin/cv`). Each `tools/<dir>` carries its own tests (`python3 -m unittest discover -s tools/<dir>`); the CV engine's live beside it at the repo root (`python3 -m unittest test_generate`).
 
 ## Architecture
 
@@ -65,6 +67,10 @@ To add a new section type, add a builder to `BUILDERS` and reference its name in
 - **Edit data, never the generated output.** `build/**/*.rendercv.yaml` and `build/**/*.typ` are generated — regenerate from YAML, never hand-edit.
 - Facts go in `clients/<client>/profile.yml`; only framing/prose goes in that client's variants.
 - `examples/profile.example.yml` is the schema documented with **fabricated** data. Keep it in sync when the schema changes.
+- **Never write `" - "` (space-hyphen-space) inside a bullet.** RenderCV treats it as a new list
+  item and splits that bullet into two, in the rendered PDF *and* in the ATS Markdown. Use a comma,
+  a semicolon, or a rewrite instead. The same string is fine in `summary` and in `location`, which
+  are not list items. `generate.py` enforces this and fails the build naming the offending bullets.
 - To restyle everything, edit `data/design.yaml` (shared); for one client only, add `clients/<client>/design.yaml`. Full option list: `uvx --from "rendercv[full]" rendercv new "x" --theme sb2nov`.
 
 ## Code/data privacy split

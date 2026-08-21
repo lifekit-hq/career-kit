@@ -143,5 +143,64 @@ class Followup(Base):
         self.assertGreater(due[0]["days_overdue"], due[1]["days_overdue"])
 
 
+class HandEditedLedger(Base):
+    """The file header says "Hand-editable", so it has to tolerate what a hand
+    writes - not only what save() wrote. Every case here crashed with a raw
+    traceback before."""
+
+    def write(self, text):
+        (self.client / "applications.yml").write_text(text)
+
+    def test_an_applications_key_with_nothing_under_it(self):
+        # `applications:` alone parses as None, not as an empty list.
+        self.write("schema: career-apply/1\napplications:\n")
+        _, d = self.run_cli("list", str(self.client))
+        self.assertEqual((d["count"], d["applications"]), (0, []))
+
+    def test_an_unquoted_date_is_a_date_object_not_a_string(self):
+        # YAML parses 2026-08-01 as datetime.date; we compare these as ISO
+        # strings, so followup raised TypeError on a hand-written entry.
+        self.write("applications:\n- id: a001\n  status: sent\n"
+                   "  applied: 2026-08-01\n  followup: 2026-08-01\n")
+        _, d = self.run_cli("followup", str(self.client), "--on", "2026-08-21")
+        self.assertEqual(d["count"], 1)
+        self.assertEqual(d["due"][0]["days_overdue"], 20)
+
+    def test_applications_that_is_not_a_list_is_a_usage_error(self):
+        self.write("applications: nope\n")
+        self.assertEqual(self.run_cli("list", str(self.client))[0], 2)
+
+    def test_an_entry_that_is_not_a_mapping_is_a_usage_error(self):
+        self.write("applications:\n- just a string\n")
+        self.assertEqual(self.run_cli("list", str(self.client))[0], 2)
+
+    def test_a_hand_written_id_does_not_break_the_next_generated_one(self):
+        self.write("applications:\n- id: pardgroup-aug\n  status: sent\n")
+        _, d = self.add()
+        self.assertEqual(d["added"]["id"], "a001")
+
+
+class Reopening(Base):
+    def test_reopening_a_rejected_application_restores_its_followup_date(self):
+        # Otherwise it reads as live while being invisible to `followup`
+        # forever - the exact lost thread the ledger exists to prevent.
+        self.add("--applied", "2026-08-10")
+        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
+        _, d = self.run_cli("set", str(self.client), "a001", "--status", "sent")
+        self.assertEqual(d["updated"]["followup"], "2026-08-28")   # today + 7
+
+    def test_an_explicit_followup_still_wins_over_the_restored_one(self):
+        self.add()
+        self.run_cli("set", str(self.client), "a001", "--status", "ghosted")
+        _, d = self.run_cli("set", str(self.client), "a001",
+                            "--status", "sent", "--followup", "2026-09-01")
+        self.assertEqual(d["updated"]["followup"], "2026-09-01")
+
+    def test_reopening_does_not_disturb_a_followup_that_is_still_set(self):
+        self.add("--applied", "2026-08-10")
+        _, d = self.run_cli("set", str(self.client), "a001", "--status", "replied")
+        self.assertEqual(d["updated"]["followup"], "2026-08-17")
+
+
 if __name__ == "__main__":
     unittest.main()

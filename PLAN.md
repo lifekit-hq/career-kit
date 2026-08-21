@@ -2,11 +2,13 @@
 
 ## Destination
 
-career-kit is the executor layer of a career platform: one unified CLI
-(`bin/career`) exposing every career-work chunk as a precise, agent-callable
-command with JSON in/out - lanes: `linkedin`, `cv`, `portfolio`, `strategy` -
-with the LinkedIn lane as the first fully-built implementation.
-(Agreed 2026-08-19.)
+career-kit carries client #1 through a real Dublin job hunt end to end -
+apply, track, follow up, learn - and every verb it grows is one that hunt
+demanded. It stays the executor layer of a career platform: one unified CLI
+(`bin/career`) exposing each chunk as a precise, agent-callable command with
+JSON in/out. Lanes get built on demand, never to complete a grid.
+(Agreed 2026-08-21; supersedes the 2026-08-19 lane-coverage destination, which
+the LinkedIn and CV lanes fulfilled.)
 
 ## How work is tracked
 

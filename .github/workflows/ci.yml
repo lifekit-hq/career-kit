@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: unit suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # pyyaml is the only third-party import the suites need; generate.py
+      # declares it inline (PEP 723) for `uv run`, which the render job uses.
+      - run: pip install --disable-pip-version-check pyyaml
+
+      - name: CV engine
+        run: python3 -m unittest test_generate
+
+      # Discovered, not enumerated: a new tools/<dir> cannot silently escape
+      # the gate by not being added to a list here.
+      - name: Tool suites
+        run: |
+          set -euo pipefail
+          for d in tools/*/; do
+            echo "::group::$d"
+            python3 -m unittest discover -s "$d"
+            echo "::endgroup::"
+          done
+
+  render:
+    name: render smoke (examples/ only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check uv
+
+      - name: Cache uv downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-rendercv
+
+      # The clients/ tree is private and absent from this checkout (PRIVATE.md),
+      # so the smoke test runs on the committed fabricated profile. That is what
+      # makes examples/profile.example.yml the fidelity anchor CLAUDE.md calls
+      # it: if the schema drifts, this job is what notices.
+      - name: Stage the example as a throwaway client
+        run: |
+          mkdir -p clients/_example
+          cp examples/profile.example.yml clients/_example/profile.yml
+
+      # Exercises generate.py, data/design.yaml, RenderCV, and the --json
+      # envelope in one step - the whole cv build path a recruiter's PDF takes.
+      # Redirect, never pipe: the default run: shell is `bash -e` WITHOUT
+      # pipefail, so `career ... | tee` would report tee's 0 and go green on a
+      # failed build. set -o pipefail here for the same reason.
+      - name: career cv build -c _example --json
+        run: |
+          set -euo pipefail
+          ./bin/career cv build -c _example --json > build.json
+          cat build.json
+
+      - name: Assert the PDF and the ATS Markdown exist
+        run: |
+          set -euo pipefail
+          python3 -c "import json,os,sys; p=json.load(open('build.json'))['data']['pdf']; sys.exit(0 if os.path.getsize(p)>0 else 'empty pdf')"
+          ls build/_example/baseline/*_CV.md
+
+      - name: ATS text is reachable through the envelope
+        run: |
+          set -euo pipefail
+          ./bin/career cv ats -c _example --json > ats.json
+          python3 -c "import json; d=json.load(open('ats.json'))['data']['markdown']; assert 'Ada Lovelace' in d, d[:200]"

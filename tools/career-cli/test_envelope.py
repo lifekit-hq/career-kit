@@ -27,6 +27,7 @@ VERBS = [
     ("cv", "ats", []),
     ("cv", "match", ["baseline", "/nonexistent.txt"]),
     ("cv", "lint", []),
+    ("cv", "letter", ["captures/nope"]),
     ("linkedin", "capture", []),
     ("linkedin", "diff", []),
     ("linkedin", "audit", []),
@@ -79,6 +80,11 @@ class EveryVerbAnswersWithAnEnvelope(unittest.TestCase):
                 # An unknown client is a usage error: CONTRACT.md reserves 2
                 # for those and 1 for operational failure.
                 self.assertEqual(p.returncode, 2, p.stdout)
+                # Exactly one object, always: `emit` does not exit on success,
+                # so a verb that forgets to can print a second envelope after
+                # falling through to usage(). That is invisible until a caller
+                # does json.loads(stdout) and gets "Extra data".
+                self.assertEqual(len(p.stdout.strip().splitlines()), 1, p.stdout)
 
     def test_stdout_holds_exactly_one_json_object(self):
         # Diagnostics belong on stderr; a second line would break every caller
@@ -118,6 +124,13 @@ class CvLaneSuccessPayloads(unittest.TestCase):
         self.assertTrue(env["ok"])
         self.assertEqual(env["data"]["markdown"].strip(),
                          self.md.read_text().strip())
+
+    def test_lint_emits_exactly_one_envelope_on_its_success_path(self):
+        # The bad-client row in the table above short-circuits before the
+        # fallthrough, so only a real client reaches the branch that broke.
+        p = run("cv", "lint", "--json")
+        self.assertEqual(len(p.stdout.strip().splitlines()), 1, p.stdout)
+        self.assertTrue(json.loads(p.stdout)["ok"])
 
     def test_match_returns_missing_keywords_as_a_list(self):
         jd = ROOT / "build" / "_envelope_test_jd.txt"

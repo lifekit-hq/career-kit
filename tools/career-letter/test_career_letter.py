@@ -63,6 +63,11 @@ class Grounding(Base):
             self.assertNotIn(noise, unev)
         self.assertGreater(self.build()["signals"]["noise_filtered"], 0)
 
+    def test_a_bare_capture_timestamp_resolves_as_it_does_for_apply_add(self):
+        # Two verbs taking the same argument must not disagree on its shape.
+        pack = cl.build(self.profile, Path("snap"))
+        self.assertEqual(pack["job"]["company"], "Pardgroup")
+
     def test_the_scaffold_carries_no_claim_of_its_own(self):
         # Everything factual in it comes from the profile or the job posting.
         s = self.build()["scaffold"]

@@ -18,7 +18,7 @@ Exit codes: 0 = ok, 1 = operational failure, 2 = usage error.
 import argparse
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -39,13 +39,37 @@ class Usage(Exception):
 
 
 def load(client_dir: Path) -> dict:
+    """The file is advertised as hand-editable, so it has to tolerate what a
+    hand writes: an `applications:` key with nothing under it parses as None,
+    not as an empty list."""
     p = client_dir / LEDGER
     if not p.exists():
         return {"schema": SCHEMA, "applications": []}
     doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    doc.setdefault("schema", SCHEMA)
-    doc.setdefault("applications", [])
+    if not isinstance(doc, dict):
+        raise Usage(f"{p} is not a mapping - expected `applications:` at the top level")
+    doc["schema"] = doc.get("schema") or SCHEMA
+    apps = doc.get("applications") or []
+    if not isinstance(apps, list):
+        raise Usage(f"{p}: `applications` must be a list, got {type(apps).__name__}")
+    doc["applications"] = [_normalize(a, p) for a in apps]
     return doc
+
+
+def _normalize(entry, path):
+    """YAML parses an unquoted 2026-08-01 as a date object, and we compare and
+    store these as ISO strings. Our own writer quotes them, so this only bites
+    a hand-edited file - which is exactly the file we tell people to edit."""
+    if not isinstance(entry, dict):
+        raise Usage(f"{path}: every application must be a mapping, got "
+                    f"{type(entry).__name__}")
+    for k in ("applied", "followup"):
+        v = entry.get(k)
+        if isinstance(v, datetime):
+            entry[k] = v.date().isoformat()
+        elif isinstance(v, date):
+            entry[k] = v.isoformat()
+    return entry
 
 
 def save(client_dir: Path, doc: dict) -> None:
@@ -147,6 +171,12 @@ def cmd_set(args) -> dict:
         # would keep it surfacing in the follow-up queue forever.
         if args.status in ("rejected", "ghosted"):
             entry["followup"] = None
+        elif not entry.get("followup"):
+            # ...and reopening one has to give the date back, or the
+            # application reads as live while being invisible to `followup`
+            # forever - the exact lost thread this ledger exists to prevent.
+            entry["followup"] = (date.fromisoformat(args.today)
+                                 + timedelta(days=FOLLOWUP_DAYS)).isoformat()
     if args.followup:
         entry["followup"] = parse_date(args.followup, "followup")
     if args.notes is not None:

@@ -6,7 +6,11 @@
 Recruiters cross-check the CV against LinkedIn; this makes that check a
 mechanism. Compares the merged CV view (profile + optional variant, via
 generate.merge - exactly what renders) against a capture-store profile
-snapshot: headline equality, each role's title/company/start date, education.
+snapshot: headline, each role's title/company/start date, education.
+
+The headline rule: the role noun (everything before the first '|') is fixed and
+must match LinkedIn; the modifiers after the pipe are per-variant framing, so a
+variant that overrides `headline` gets a warn for the tail, not a fail.
 
 Exit codes: 0 = clean, 1 = findings (any fail), 2 = usage/operational error.
 """
@@ -64,6 +68,12 @@ def _find_position(positions, role):
     return None
 
 
+def role_noun(headline):
+    """Everything before the first '|' - the title a recruiter cross-checks and
+    an ATS pattern-matches. What follows the pipe is per-application framing."""
+    return str(headline or "").split("|")[0].strip()
+
+
 DEGREE_CLASS = [(r"\b(ba|bsc|bachelor)\b", "bachelor"), (r"\b(ma|msc|master)\b", "master"),
                 (r"\bphd\b|doctor", "doctorate")]
 
@@ -76,7 +86,9 @@ def degree_class(s):
     return None
 
 
-def lint(cfg: dict, snap: dict) -> list[dict]:
+def lint(cfg: dict, snap: dict, tailored: bool = False) -> list[dict]:
+    """`tailored` = the variant overrides the headline, so its modifiers are
+    expected to differ from LinkedIn. The role noun is checked either way."""
     findings = []
 
     def add(status, check, detail):
@@ -85,10 +97,21 @@ def lint(cfg: dict, snap: dict) -> list[dict]:
     all_text = norm(" ".join(snap["texts"].values()))
 
     headline = cfg.get("headline", "")
-    if norm(headline) in norm(snap["texts"].get("profile", "")):
+    li_profile = norm(snap["texts"].get("profile", ""))
+    noun = role_noun(headline)
+    if norm(headline) and norm(headline) in li_profile:
         add("pass", "headline", f"CV headline found on LinkedIn: {headline!r}")
+    elif not (norm(noun) and norm(noun) in li_profile):
+        add("fail", "headline",
+            f"role noun {noun!r} is not on LinkedIn (CV headline: {headline!r})")
+    elif tailored:
+        add("warn", "headline",
+            f"role noun {noun!r} matches LinkedIn; the modifiers are tailored for "
+            f"this variant: {headline!r}")
     else:
-        add("fail", "headline", f"CV headline not on LinkedIn: {headline!r}")
+        add("fail", "headline",
+            f"role noun {noun!r} matches, but the full headline is not on "
+            f"LinkedIn: {headline!r}")
 
     positions = snap["structured"].get("positions")
     for role in cfg.get("experience", []):
@@ -173,7 +196,7 @@ def main(argv):
         print(f"bad inputs: {profile_path} / {snap_path}", file=sys.stderr)
         return 2
     cfg = merge(yaml.safe_load(profile_path.read_text(encoding="utf-8")), variant)
-    findings = lint(cfg, load_snapshot(snap_path))
+    findings = lint(cfg, load_snapshot(snap_path), tailored="headline" in (variant or {}))
     fails = sum(1 for f in findings if f["status"] == "fail")
     if as_json:
         print(json.dumps({"cv": str(profile_path), "snapshot": str(snap_path),

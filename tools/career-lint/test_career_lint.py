@@ -47,10 +47,10 @@ class CareerLintTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _lint(self, **kw):
+    def _lint(self, cfg=None, tailored=False, **kw):
         snap = make_snapshot(self.root / "s", **kw)
         return {(f["status"], f["check"]): f for f in
-                career_lint.lint(CFG, career_lint.load_snapshot(snap))}
+                career_lint.lint(cfg or CFG, career_lint.load_snapshot(snap), tailored)}
 
     def test_clean_profile(self):
         res = self._lint(
@@ -62,6 +62,33 @@ class CareerLintTest(unittest.TestCase):
 
     def test_headline_mismatch(self):
         res = self._lint(profile_text="Jane\nRecruiter at Acme",
+                         structured=GOOD_STRUCTURED)
+        self.assertIn(("fail", "headline"), res)
+
+    # The role noun (before the first '|') is fixed everywhere; the modifiers
+    # after it are per-variant framing. See issue #16.
+    def test_role_noun(self):
+        self.assertEqual(career_lint.role_noun("Social Media Manager | Canva · Reels"),
+                         "Social Media Manager")
+        self.assertEqual(career_lint.role_noun("Recruiter"), "Recruiter")
+        self.assertEqual(career_lint.role_noun(None), "")
+
+    def test_tailored_headline_warns_when_only_modifiers_differ(self):
+        cfg = dict(CFG, headline="Social Media Manager | Instagram & LinkedIn")
+        res = self._lint(cfg=cfg, tailored=True, profile_text="Jane\nSocial Media Manager | Canva",
+                         structured=GOOD_STRUCTURED)
+        self.assertIn(("warn", "headline"), res)
+        self.assertNotIn(("fail", "headline"), res)
+
+    def test_untailored_headline_still_fails_when_modifiers_differ(self):
+        cfg = dict(CFG, headline="Social Media Manager | Instagram & LinkedIn")
+        res = self._lint(cfg=cfg, tailored=False, profile_text="Jane\nSocial Media Manager | Canva",
+                         structured=GOOD_STRUCTURED)
+        self.assertIn(("fail", "headline"), res)
+
+    def test_tailored_headline_still_fails_when_the_role_noun_differs(self):
+        cfg = dict(CFG, headline="Head of Social | Canva")
+        res = self._lint(cfg=cfg, tailored=True, profile_text="Jane\nSocial Media Manager | Canva",
                          structured=GOOD_STRUCTURED)
         self.assertIn(("fail", "headline"), res)
 

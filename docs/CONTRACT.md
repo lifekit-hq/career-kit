@@ -47,6 +47,10 @@ one JSON object to stdout:
 - `ok: false` implies `error: {"message": "..."}` and `data: null`.
 - Diagnostics and progress go to stderr, never stdout, so `--json` output is
   always parseable.
+- **Every** verb honors this, on every path. A usage error, an unknown client
+  and a missing argument all answer with the envelope and the exit code below -
+  a failure that skips it breaks callers that do `json.loads(stdout)`.
+  `tools/career-cli/test_envelope.py` holds the whole taxonomy to it.
 
 ## Exit codes
 

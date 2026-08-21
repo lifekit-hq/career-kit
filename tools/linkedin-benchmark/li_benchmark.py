@@ -59,27 +59,39 @@ def tokens(text):
 
 
 def benchmark(snaps: list[Path]) -> dict:
-    headlines, skill_df, kw_df = [], Counter(), Counter()
+    headlines, skill_df, kw_df, readable = [], Counter(), Counter(), 0
     for snap in snaps:
         h = headline_of(snap)
+        skills = [s.strip().lower() for s in skills_of(snap) if s.strip()]
+        if h or skills:
+            readable += 1
         if h:
             headlines.append(h)
             kw_df.update(set(tokens(h)))
-        skill_df.update({s.strip().lower() for s in skills_of(snap) if s.strip()})
-    n = len(snaps)
+        skill_df.update(set(skills))
     return {
-        "profiles": n,
+        "profiles": len(snaps),
+        # Shares are over the profiles something was actually read from. Over
+        # every directory passed, two unreadable captures in five turn "all of
+        # them use the pipe shape" into "40% do" - a wrong number, stated with
+        # the same confidence as a right one.
+        "readable": readable,
         "headlines": headlines,
         "headline_keywords": [{"term": t, "profiles": c}
                               for t, c in kw_df.most_common()],
         "skills": [{"skill": s, "profiles": c} for s, c in skill_df.most_common(40)],
-        "pipe_headline_share": round(sum("|" in h for h in headlines) / n, 2) if n else 0,
+        "pipe_headline_share": (round(sum("|" in h for h in headlines) / readable, 2)
+                                if readable else 0),
     }
 
 
 def to_markdown(report: dict, sources: list[str]) -> str:
-    n = report["profiles"]
-    out = [f"# LinkedIn benchmark - {n} reference profile(s)", ""]
+    n = report.get("readable", report["profiles"])
+    given = report["profiles"]
+    head = f"# LinkedIn benchmark - {n} reference profile(s)"
+    if given != n:
+        head += f" ({given - n} of {given} given had nothing readable)"
+    out = [head, ""]
     out += [f"- source: `{s}`" for s in sources]
     out.append("")
     out.append("## Headlines observed")
@@ -106,6 +118,10 @@ def main(argv):
             print(f"not a snapshot dir: {s}", file=sys.stderr)
             return 1
     report = benchmark(snaps)
+    if not report["readable"]:
+        print(f"nothing readable in {len(snaps)} dir(s) - a benchmark over zero "
+              "profiles is not a small sample, it is no sample", file=sys.stderr)
+        return 1
     print(json.dumps(report) if as_json else to_markdown(report, [str(s) for s in snaps]))
     return 0
 

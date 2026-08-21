@@ -128,5 +128,45 @@ class LiAuditTest(unittest.TestCase):
         self.assertNotIn("open_to_work", scored_ids)
 
 
+class RefusesTheWrongInput(unittest.TestCase):
+    """A profile rubric will score anything you hand it. Scoring a job post
+    1/5 and listing five confident fixes for it looks exactly like a real
+    result, which is what makes it worse than an error."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def run_main(self, snap):
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()):
+            return li_audit.main([str(snap)])
+
+    def test_a_job_snapshot_is_a_usage_error(self):
+        snap = self.root / "job"
+        make_snapshot(snap, {"profile": GOOD_PROFILE}, manifest={"kind": "job"})
+        self.assertEqual(self.run_main(snap), 2)
+
+    def test_a_capture_with_no_profile_text_is_a_missing_input_not_a_low_score(self):
+        snap = self.root / "empty"
+        snap.mkdir(parents=True)
+        (snap / "manifest.json").write_text(json.dumps({"kind": "profile"}))
+        self.assertEqual(self.run_main(snap), 1)
+
+    def test_a_real_profile_snapshot_still_scores(self):
+        snap = self.root / "ok"
+        make_snapshot(snap, {"profile": GOOD_PROFILE}, manifest={"kind": "profile"})
+        self.assertEqual(self.run_main(snap), 0)
+
+    def test_a_manifest_without_a_kind_still_reads_as_a_profile(self):
+        # Legacy captures predate the kind field; they must not start failing.
+        snap = self.root / "legacy"
+        make_snapshot(snap, {"profile": GOOD_PROFILE}, manifest={})
+        self.assertEqual(self.run_main(snap), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

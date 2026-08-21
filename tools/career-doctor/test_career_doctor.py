@@ -95,11 +95,18 @@ class Report(unittest.TestCase):
         self.assertFalse(doc.summarize(checks)["ok"])
 
     def test_exit_code_is_1_only_when_something_failed(self):
+        # Stub the probes: the real ones read the host toolchain, and CI's test
+        # job deliberately has no uv (only the render job installs it), so a
+        # live run here would assert the runner's setup, not doctor's logic.
         import contextlib
         import io
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(doc.main([str(self.root), "--client", "acme", "--json"]), 0)
-            self.assertEqual(doc.main([str(self.root), "--client", "nope", "--json"]), 1)
+        real = doc.run_checks
+        self.addCleanup(lambda: setattr(doc, "run_checks", real))
+        for checks, expected in (([doc._c(doc.OK, "x", "")], 0),
+                                 ([doc._c(doc.FAIL, "x", "")], 1)):
+            doc.run_checks = lambda *a, _c=checks, **k: _c
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(doc.main([str(self.root), "--json"]), expected)
 
     def test_the_fix_line_is_shown_for_problems_and_hidden_for_ok(self):
         text = doc.render(doc.summarize(

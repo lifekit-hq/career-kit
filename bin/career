@@ -3,6 +3,7 @@
 # Contract (taxonomy, JSON envelope, exit codes): docs/CONTRACT.md
 #
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
+#   career cv letter <jd-snapshot> [variant]  grounded input pack for a cover letter
 #   career apply add|list|set [...]           application ledger
 #   career doctor                             preflight: what is missing before a verb needs it
 #   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
@@ -24,6 +25,7 @@ LINTER="$ROOT/tools/career-lint/career_lint.py"
 BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
 APPLY="$ROOT/tools/career-apply/career_apply.py"
 DOCTOR="$ROOT/tools/career-doctor/career_doctor.py"
+LETTER="$ROOT/tools/career-letter/career_letter.py"
 
 client="" json=0
 args=()
@@ -140,11 +142,38 @@ case "$lane" in
       vfile="$ROOT/clients/$client/variants/$variant.yml"
       [ -f "$vfile" ] && vargs=(--variant "$vfile")
       if [ "$json" = 1 ]; then
-        data="$(python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"} --json)" \
-          || [ $? -eq 1 ] || fail "lint failed to run"
+        # rc 1 means "found problems", not "broke" - carry it out, the way
+        # doctor does, instead of reporting success in JSON mode only.
+        if data="$(python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"} --json)"; then rc=0; else rc=$?; fi
+        [ "$rc" -le 1 ] || fail "lint failed to run"
         emit true "$data" -
+        exit "$rc"          # emit does not exit on success; without this the
+                            # verb falls through to usage() and prints a SECOND
+                            # envelope, breaking json.loads(stdout).
       else
         exec python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"}
+      fi
+    fi
+    if [ "$verb" = letter ]; then
+      snap="${3:-}"
+      [ -n "$snap" ] || usage_fail "usage: career cv letter <jd-snapshot> [variant]"
+      variant="${4:-baseline}"
+      largs=("$ROOT/clients/$client/profile.yml" "$snap")
+      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      [ -f "$vfile" ] && largs+=(--variant "$vfile")
+      md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
+      [ -n "$md" ] && largs+=(--cv "$md")
+      if [ "$json" = 1 ]; then
+        errf="$(mktemp)"
+        if data="$(python3 "$LETTER" "${largs[@]}" --json 2>"$errf")"; then
+          rm -f "$errf"; emit true "$data" -; exit 0
+        else
+          code=$?; msg="$(cat "$errf")"; rm -f "$errf"
+          [ "$code" = 2 ] && usage_fail "${msg:-cv letter: bad arguments}"
+          fail "${msg:-cv letter failed}"
+        fi
+      else
+        exec python3 "$LETTER" "${largs[@]}"
       fi
     fi
     case "$verb" in

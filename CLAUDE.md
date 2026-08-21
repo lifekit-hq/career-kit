@@ -27,6 +27,8 @@ bin/career linkedin jd <jobs-url|job-id> [-c client]  # snapshot a job post (man
 bin/career linkedin keywords [variant] [-c client]  # JD keyword corpus, marked against the CV text
 bin/career linkedin benchmark <snap-dir>...  # target model from reference-profile captures (ad-hoc out-dirs)
 
+bin/career cv letter <jd-snapshot> [variant] [-c client]  # grounded pack for a cover letter (facts, matched JD language, unbacked terms, scaffold)
+
 bin/career apply add <jd-snapshot> [--variant v] [-c client]  # record an application (company/role read from the capture)
 bin/career apply list [--status s] [-c client]  # the ledger
 bin/career apply set <id> --status sent|replied|interview|rejected|ghosted [--followup DATE]

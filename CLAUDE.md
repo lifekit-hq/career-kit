@@ -32,6 +32,8 @@ bin/career apply list [--status s] [-c client]  # the ledger
 bin/career apply set <id> --status sent|replied|interview|rejected|ghosted [--followup DATE]
 bin/career apply followup [--on DATE] [-c client]  # what is due to chase, most overdue first
 
+bin/career doctor [-c client]  # preflight: python, uv/uvx, CDP Chrome, client, design
+
 bin/cv build [variant] [-c client]   # back-compat alias: merge YAML + render -> PDF
 bin/cv ats   [variant] [-c client]   # print RenderCV's .md (the exact text an ATS parser sees)
 bin/cv match [variant] <jd> [-c client]   # list JD keywords absent from the CV text

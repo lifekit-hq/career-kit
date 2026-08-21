@@ -4,6 +4,7 @@
 #
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
 #   career apply add|list|set [...]           application ledger
+#   career doctor                             preflight: what is missing before a verb needs it
 #   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
 #   career linkedin capture <url|public-id>   snapshot a profile into the store
 #   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
@@ -22,6 +23,7 @@ JDINTEL="$ROOT/tools/jd-intel/jd_intel.py"
 LINTER="$ROOT/tools/career-lint/career_lint.py"
 BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
 APPLY="$ROOT/tools/career-apply/career_apply.py"
+DOCTOR="$ROOT/tools/career-doctor/career_doctor.py"
 
 client="" json=0
 args=()
@@ -37,7 +39,7 @@ set -- "${args[@]+"${args[@]}"}"
 
 lane="${1:-}"; verb="${2:-}"
 
-usage() { usage_fail "usage: career {cv|linkedin|apply} <verb> [args] [-c client] [--json]  (see docs/CONTRACT.md)"; }
+usage() { usage_fail "usage: career {cv|linkedin|apply} <verb> [args] [-c client] [--json] | career doctor  (see docs/CONTRACT.md)"; }
 
 # emit <ok> <data-json|null> <error-message|-> ; then exit accordingly.
 emit() {
@@ -164,6 +166,20 @@ case "$lane" in
           'import json,sys; print(json.dumps({"missing": [l[4:].rstrip("\n") for l in sys.stdin if l.startswith("  - ")]}))')" -
         ;;
     esac
+    ;;
+
+  doctor)
+    # The one non-lane command: it answers "why did that verb fail" before the
+    # verb is run, so it cannot itself require the things it is checking for.
+    verb="check"
+    if [ "$json" = 1 ]; then
+      if data="$(python3 "$DOCTOR" "$ROOT" --client "$client" --json)"; then rc=0; else rc=$?; fi
+      [ "$rc" -le 1 ] || fail "doctor failed to run"
+      emit true "$data" -
+      exit "$rc"
+    else
+      exec python3 "$DOCTOR" "$ROOT" --client "$client"
+    fi
     ;;
 
   apply)

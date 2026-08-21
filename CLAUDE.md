@@ -61,7 +61,7 @@ The CV engine is a **three-layer split** that RenderCV itself has no concept of 
 
 `generate.py` resolves the client (`-c`, else `clients/.default`), then: deep-copies that client's profile, overlays the variant (`merge()`), translates the authoring schema into a RenderCV input file (`to_rendercv()`), and RenderCV renders it to PDF + Markdown. **The RenderCV Markdown *is* the ATS text** — that's why `ats`/`match` read from `build/<client>/<variant>/*_CV.md`.
 
-Beyond the CV engine, a client dir also holds `captures/` (dated LinkedIn snapshots — `<ISO-timestamp>/` dirs with a `manifest.json`, append-only evidence; legacy flat captures are wrapped as a snapshot with `"legacy": true`) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/` (`tools/linkedin-scrape/`, `tools/linkedin-diff/`).
+Beyond the CV engine, a client dir also holds `captures/` (dated LinkedIn snapshots — `<ISO-timestamp>/` dirs with a `manifest.json`, append-only evidence; legacy flat captures are wrapped as a snapshot with `"legacy": true`) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/`, one directory per verb-family, each with its own tests: `linkedin-scrape/`, `linkedin-diff/`, `linkedin-audit/`, `linkedin-benchmark/`, `jd-intel/` (the `keywords` verb), `career-lint/`, `career-apply/` (the application ledger), `career-letter/`, `career-doctor/`, and `career-cli/` (contract-level tests over `bin/career` itself: the `--json` envelope, exit codes, and the no-client-identities privacy guard).
 
 ### `generate.py` internals
 

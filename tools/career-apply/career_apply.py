@@ -3,6 +3,7 @@
     python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] ...
     python3 career_apply.py list <client-dir> [--status S] [--json]
     python3 career_apply.py set  <client-dir> <id> [--status S] [--followup D] ...
+    python3 career_apply.py followup <client-dir> [--on DATE] [--json]
 
 A hunt without a ledger loses the thread: which variant went where, on what
 date, and what came back. The store is `<client-dir>/applications.yml`, private
@@ -154,6 +155,20 @@ def cmd_set(args) -> dict:
     return {"updated": entry}
 
 
+def cmd_followup(args) -> dict:
+    """What is due. Open statuses only - a rejected or ghosted application has
+    nothing left to chase, and its followup date was cleared when it got there."""
+    on = parse_date(args.on, "on") if args.on else args.today
+    due = [a for a in load(Path(args.client_dir))["applications"]
+           if a.get("status") in OPEN_STATUSES and a.get("followup")
+           and a["followup"] <= on]
+    due.sort(key=lambda a: a["followup"])          # most overdue first
+    for a in due:
+        a["days_overdue"] = (date.fromisoformat(on)
+                             - date.fromisoformat(a["followup"])).days
+    return {"due": due, "count": len(due), "on": on}
+
+
 def render(verb: str, data: dict) -> str:
     if verb == "add":
         e = data["added"]
@@ -163,6 +178,14 @@ def render(verb: str, data: dict) -> str:
     if verb == "set":
         e = data["updated"]
         return f"→ {e['id']}  status {e['status']} · follow up {e['followup'] or '-'}"
+    if verb == "followup":
+        due = data["due"]
+        if not due:
+            return f"nothing due as of {data['on']}"
+        rows = [f"  {a['id']}  {a['days_overdue']:>3}d  "
+                f"{(a.get('company') or '?')} - {(a.get('role') or '?')}"
+                f"  (due {a['followup']})" for a in due]
+        return f"{len(due)} follow-up(s) due as of {data['on']}:\n" + "\n".join(rows)
     apps = data["applications"]
     if not apps:
         return "no applications recorded"
@@ -188,6 +211,10 @@ def main(argv=None, today=None):
 
     l = sub.add_parser("list", parents=[common]); l.set_defaults(fn=cmd_list)
     l.add_argument("client_dir"); l.add_argument("--status")
+
+    f = sub.add_parser("followup", parents=[common]); f.set_defaults(fn=cmd_followup)
+    f.add_argument("client_dir")
+    f.add_argument("--on", help="evaluate as of this ISO date (default: today)")
 
     s = sub.add_parser("set", parents=[common]); s.set_defaults(fn=cmd_set)
     s.add_argument("client_dir"); s.add_argument("id")

@@ -109,5 +109,39 @@ class ListAndSet(Base):
         self.assertEqual(d["applications"][0]["notes"], "referred by a friend")
 
 
+class Followup(Base):
+    """What is due to chase. See #24."""
+
+    def due(self, on):
+        return self.run_cli("followup", str(self.client), "--on", on)[1]
+
+    def test_nothing_is_due_before_the_followup_date(self):
+        self.add("--applied", "2026-08-19")          # followup 2026-08-26
+        self.assertEqual(self.due("2026-08-25")["count"], 0)
+
+    def test_due_on_the_day_and_overdue_after(self):
+        self.add("--applied", "2026-08-19")
+        self.assertEqual(self.due("2026-08-26")["due"][0]["days_overdue"], 0)
+        self.assertEqual(self.due("2026-08-30")["due"][0]["days_overdue"], 4)
+
+    def test_a_rejected_application_drops_out_of_the_queue(self):
+        # Its followup was cleared at set-time; this guards both halves.
+        self.add("--applied", "2026-08-19")
+        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
+        self.assertEqual(self.due("2026-09-30")["count"], 0)
+
+    def test_a_replied_application_is_still_worth_chasing(self):
+        self.add("--applied", "2026-08-19")
+        self.run_cli("set", str(self.client), "a001", "--status", "replied")
+        self.assertEqual(self.due("2026-08-30")["count"], 1)
+
+    def test_most_overdue_first(self):
+        self.add("--applied", "2026-08-10")           # followup 08-17
+        self.add("--applied", "2026-08-19")           # followup 08-26
+        due = self.due("2026-08-30")["due"]
+        self.assertEqual([a["id"] for a in due], ["a001", "a002"])
+        self.assertGreater(due[0]["days_overdue"], due[1]["days_overdue"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -169,7 +169,7 @@ case "$lane" in
   apply)
     require_client_dir
     case "$verb" in
-      add|list|set) ;;
+      add|list|set|followup) ;;
       *) usage ;;
     esac
     shift 2 || true

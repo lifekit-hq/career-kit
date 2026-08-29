@@ -168,7 +168,7 @@ def lint(cfg: dict, snap: dict, tailored: bool = False) -> list[dict]:
 def to_markdown(findings, profile_path, snap_path):
     icon = {"pass": "✓", "fail": "✗", "warn": "!"}
     fails = sum(1 for f in findings if f["status"] == "fail")
-    out = [f"# career lint - CV vs LinkedIn",
+    out = ["# career lint - CV vs LinkedIn",
            f"- CV: `{profile_path}`", f"- snapshot: `{snap_path}`",
            f"- result: **{'CLEAN' if fails == 0 else f'{fails} MISMATCH(ES)'}**", ""]
     for f in findings:

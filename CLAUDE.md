@@ -12,7 +12,7 @@ Each person is a **client** under `clients/<name>/` (e.g. `clients/ada-lovelace/
 
 `bin/career` is the executor CLI — one precise chunk of career work per verb,
 honoring the contract in `docs/CONTRACT.md` (JSON envelope via `--json`, exit
-codes, per-client resolution). Destination/milestones: `PLAN.md`; backlog:
+codes, per-client resolution). Destination/milestones: `docs/PLAN.md`; backlog:
 GitHub issues.
 
 ```bash
@@ -96,6 +96,56 @@ The **tool** is publishable; the **content** is not. Enforced by `.gitignore`:
 - **Safe to commit:** `generate.py`, `bin/`, `data/design.yaml`, `tools/` code, `.claude/skills/`, `examples/`, docs. `examples/profile.example.yml` (fabricated) is the committed schema/fidelity anchor.
 
 See `PRIVATE.md` for the full contract.
+
+## Mandatory gates
+
+Green locally before any PR — CI runs the same three and none soft-fails:
+
+```bash
+ruff check .                                       # correctness rules only (.ruff.toml: F + E9)
+python3 -m unittest test_generate                  # the CV engine
+for d in tools/*/; do python3 -m unittest discover -s "$d"; done   # every tool suite
+```
+
+CI adds a render smoke over `examples/profile.example.yml` (needs network for
+RenderCV; not part of the local hook). Install the local wall once per clone:
+
+```bash
+git config core.hooksPath .githooks   # pre-commit = ruff + both unittest gates
+```
+
+## Conventions (ecosystem-standard)
+
+Per the lifekit [repo gold standard](https://github.com/lifekit-hq/.github/blob/main/REPO-STANDARD.md):
+
+- **Branch**: `<type>/<issue#>-<slug>` (e.g. `feat/20-apply-ledger`); create via
+  `gh issue develop <n>`.
+- **Commits / PR titles**: conventional commits; scope = tool or lane where it
+  helps (`feat(apply): …`, `fix(linkedin-scrape): …`).
+- **PR body**: what + why, then a **Validation** section stating exactly what
+  was run and green.
+- **Issues**: imperative title, no priority prefix — priority lives in the
+  `P1`/`P2` label. P1 issues carry acceptance criteria; P2/P3 stay one-liners
+  until promoted.
+- **Milestones**: `M<n> — <outcome>`, named for the outcome, never a date.
+- Main is protected in spirit: all changes land via squash-merged PR, CI green
+  first.
+- Only `README.md` and `CLAUDE.md` belong at the repo root — durable docs live
+  in `docs/` (destination/milestones: `docs/PLAN.md`); session artifacts don't
+  get files.
+
+### Gold-standard divergences
+
+- **`PRIVATE.md` stays at the root** (a third root doc): it is the privacy
+  contract for the gitignored `clients/` tree, referenced by `.gitignore`, the
+  code, and the privacy tests. Privacy failure is this repo's one unrecoverable
+  mistake, so the contract stays unmissable at the root rather than in `docs/`.
+- **No release-please / Weekly Release / publish job** (§5): career-kit
+  publishes no artifact — it is a local tool, has no package, no CHANGELOG, and
+  cuts no releases. Revisit if it ever ships one.
+- **No format check** (§6): the lint gate is deliberately correctness-only
+  (`.ruff.toml`, F + E9). Adopting `ruff format`/full style rules would rewrite
+  most of `tools/`; do it as its own change if ever, never silently in CI.
 
 ## The tailor-cv skill
 

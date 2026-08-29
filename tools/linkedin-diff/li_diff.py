@@ -123,7 +123,7 @@ def diff_snapshots(a: dict, b: dict) -> dict:
 
 
 def to_markdown(diff: dict, a: str, b: str) -> str:
-    out = [f"# LinkedIn snapshot diff", f"- A (old): `{a}`", f"- B (new): `{b}`", ""]
+    out = ["# LinkedIn snapshot diff", f"- A (old): `{a}`", f"- B (new): `{b}`", ""]
     if not diff["sections"] and not diff["fields"]:
         out.append("No changes detected.")
         return "\n".join(out)

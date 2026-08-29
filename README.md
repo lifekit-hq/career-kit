@@ -125,10 +125,11 @@ documented. See `PRIVATE.md`.
 ## Tests
 
 ```bash
+ruff check .                                      # correctness lint (.ruff.toml: F + E9)
 python3 -m unittest test_generate                 # the CV engine
 for d in tools/*/; do python3 -m unittest discover -s "$d"; done
 ```
 
-CI runs both on every push and PR, plus a render smoke test over
+CI runs all three on every push and PR, plus a render smoke test over
 `examples/profile.example.yml` — the only profile it can see, since `clients/`
 is private.

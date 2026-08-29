@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre-commit gate — the same wall CI enforces (minus the render smoke, which
+# needs the network). Agents and humans hit the same checks locally.
+#
+# Install once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# Lint (correctness rules from .ruff.toml). uv is already a repo requirement.
+if command -v ruff >/dev/null 2>&1; then
+  ruff check .
+elif command -v uvx >/dev/null 2>&1; then
+  uvx ruff check .
+else
+  echo "pre-commit: ruff not found (install uv, or ruff) — refusing to commit unlinted" >&2
+  exit 1
+fi
+
+# The CV engine suite + every tools/<dir> suite (discovered, not enumerated).
+python3 -m unittest test_generate
+for d in tools/*/; do
+  python3 -m unittest discover -s "$d"
+done

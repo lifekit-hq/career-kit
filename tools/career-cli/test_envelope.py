@@ -9,7 +9,6 @@ This suite exists so the next verb added cannot regress it silently.
 Run:  python3 -m unittest discover -s tools/career-cli
 """
 import json
-import os
 import shutil
 import subprocess
 import unittest

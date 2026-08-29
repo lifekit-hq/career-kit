@@ -1,0 +1,5 @@
+# Correctness gate, not a style one: pyflakes (F) + syntax errors (E9).
+# CI and .githooks/pre-commit both run plain `ruff check .` against this.
+# Widening the set is a deliberate choice (it currently fails on E7xx style
+# rules across tools/) — never widen and soft-fail.
+lint.select = ["F", "E9"]

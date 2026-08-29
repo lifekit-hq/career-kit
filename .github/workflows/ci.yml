@@ -10,6 +10,19 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: lint (ruff, correctness rules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --disable-pip-version-check ruff
+      # Rule set lives in .ruff.toml (F + E9 — pyflakes + syntax errors, not
+      # style). Zero findings or the gate fails; no soft-fail.
+      - run: ruff check .
+
   tests:
     name: unit suites
     runs-on: ubuntu-latest

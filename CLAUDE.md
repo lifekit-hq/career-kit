@@ -30,8 +30,9 @@ bin/career linkedin benchmark <snap-dir>...  # target model from reference-profi
 bin/career cv letter <jd-snapshot> [variant] [-c client]  # grounded pack for a cover letter (facts, matched JD language, unbacked terms, scaffold)
 
 bin/career apply add <jd-snapshot> [--variant v] [-c client]  # record an application (company/role read from the capture)
-bin/career apply list [--status s] [-c client]  # the ledger
+bin/career apply list [--status s] [-c client]  # the ledger (+ derived days-quiet / chase count)
 bin/career apply set <id> --status sent|replied|interview|rejected|ghosted [--followup DATE]
+bin/career apply set <id> --chased [DATE]  # record a chase (notes marker); restarts the follow-up clock
 bin/career apply followup [--on DATE] [-c client]  # what is due to chase, most overdue first
 
 bin/career doctor [-c client]  # preflight: python, uv/uvx, CDP Chrome, client, design

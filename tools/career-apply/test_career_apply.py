@@ -143,6 +143,78 @@ class Followup(Base):
         self.assertGreater(due[0]["days_overdue"], due[1]["days_overdue"])
 
 
+class Chasing(Base):
+    """days-quiet and the chase recorder (#45). Both derived from data the
+    ledger already holds - nothing new is stored except the notes marker."""
+
+    def test_days_quiet_counts_from_applied(self):
+        self.add("--applied", "2026-08-10")           # TODAY is 2026-08-21
+        _, d = self.run_cli("list", str(self.client))
+        self.assertEqual(d["applications"][0]["days_quiet"], 11)
+        self.assertEqual(d["applications"][0]["chases"], 0)
+
+    def test_a_chase_restarts_the_quiet_clock_and_the_followup(self):
+        self.add("--applied", "2026-08-01")
+        _, d = self.run_cli("set", str(self.client), "a001",
+                            "--chased", "2026-08-15")
+        self.assertIn("chased 2026-08-15", d["updated"]["notes"])
+        self.assertEqual(d["updated"]["followup"], "2026-08-22")   # chase + 7
+        _, d = self.run_cli("list", str(self.client))
+        self.assertEqual(d["applications"][0]["days_quiet"], 6)    # from chase
+        self.assertEqual(d["applications"][0]["chases"], 1)
+
+    def test_a_bare_chased_flag_means_today(self):
+        self.add("--applied", "2026-08-01")
+        _, d = self.run_cli("set", str(self.client), "a001", "--chased")
+        self.assertIn(f"chased {TODAY}", d["updated"]["notes"])
+
+    def test_chasing_keeps_existing_notes(self):
+        self.add("--notes", "referred by a friend")
+        _, d = self.run_cli("set", str(self.client), "a001", "--chased")
+        self.assertEqual(d["updated"]["notes"],
+                         f"referred by a friend; chased {TODAY}")
+
+    def test_an_explicit_followup_beats_the_chase_bump(self):
+        self.add()
+        _, d = self.run_cli("set", str(self.client), "a001",
+                            "--chased", "--followup", "2026-09-15")
+        self.assertEqual(d["updated"]["followup"], "2026-09-15")
+
+    def test_chasing_a_closed_application_is_a_usage_error(self):
+        self.add()
+        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
+        code, _ = self.run_cli("set", str(self.client), "a001", "--chased")
+        self.assertEqual(code, 2)
+
+    def test_a_terminal_application_has_no_quiet_to_measure(self):
+        self.add("--applied", "2026-08-10")
+        self.run_cli("set", str(self.client), "a001", "--status", "ghosted")
+        _, d = self.run_cli("list", str(self.client))
+        self.assertIsNone(d["applications"][0]["days_quiet"])
+
+    def test_a_hand_written_chase_marker_counts_too(self):
+        # The marker is the format, not the flag - hand edits stay first-class.
+        self.add()
+        self.run_cli("set", str(self.client), "a001",
+                     "--notes", "pinged recruiter, chased 2026-08-25, no reply")
+        _, d = self.run_cli("followup", str(self.client), "--on", "2026-09-30")
+        self.assertEqual(d["due"][0]["chases"], 1)
+
+    def test_derived_fields_never_reach_the_ledger_file(self):
+        self.add()
+        self.run_cli("list", str(self.client))
+        text = (self.client / "applications.yml").read_text()
+        self.assertNotIn("days_quiet", text)
+        self.assertNotIn("chases", text)
+
+    def test_a_garbage_hand_typed_date_degrades_to_no_value(self):
+        (self.client / "applications.yml").write_text(
+            "applications:\n- id: a001\n  status: sent\n  applied: soonish\n")
+        code, d = self.run_cli("list", str(self.client))
+        self.assertEqual(code, 0)
+        self.assertIsNone(d["applications"][0]["days_quiet"])
+
+
 class HandEditedLedger(Base):
     """The file header says "Hand-editable", so it has to tolerate what a hand
     writes - not only what save() wrote. Every case here crashed with a raw

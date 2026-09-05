@@ -17,6 +17,7 @@ Exit codes: 0 = ok, 1 = operational failure, 2 = usage error.
 """
 import argparse
 import json
+import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -106,6 +107,28 @@ def parse_date(s: str, field: str) -> str:
         raise Usage(f"--{field} must be an ISO date (YYYY-MM-DD), got {s!r}")
 
 
+# A chase lives in `notes` as a dated marker rather than a separate field, so a
+# hand-written "chased 2026-09-01" counts exactly like one `--chased` recorded.
+CHASE_RE = re.compile(r"chased (\d{4}-\d{2}-\d{2})")
+
+
+def chase_dates(entry: dict) -> list:
+    return CHASE_RE.findall(str(entry.get("notes") or ""))
+
+
+def days_quiet(entry: dict, today: str):
+    """Days since the last thing WE did - applying, or the latest chase. Derived
+    at read time, never stored; a terminal application has no quiet to measure.
+    A hand-typed garbage date degrades to no value, not a crash."""
+    if entry.get("status") not in OPEN_STATUSES:
+        return None
+    try:
+        last = max(d for d in [entry.get("applied"), *chase_dates(entry)] if d)
+        return (date.fromisoformat(today) - date.fromisoformat(last)).days
+    except (ValueError, TypeError):
+        return None
+
+
 def cmd_add(args) -> dict:
     client_dir = Path(args.client_dir)
     # Accept whatever the user has to hand: the path `career linkedin jd`
@@ -153,6 +176,11 @@ def cmd_list(args) -> dict:
         if args.status not in STATUSES:
             raise Usage(f"unknown status {args.status!r}; one of {', '.join(STATUSES)}")
         apps = [a for a in apps if a.get("status") == args.status]
+    # Derived fields only - cmd_list never save()s, so these cannot leak into
+    # the ledger file.
+    for a in apps:
+        a["days_quiet"] = days_quiet(a, args.today)
+        a["chases"] = len(chase_dates(a))
     return {"applications": apps, "count": len(apps)}
 
 
@@ -177,10 +205,21 @@ def cmd_set(args) -> dict:
             # forever - the exact lost thread this ledger exists to prevent.
             entry["followup"] = (date.fromisoformat(args.today)
                                  + timedelta(days=FOLLOWUP_DAYS)).isoformat()
-    if args.followup:
-        entry["followup"] = parse_date(args.followup, "followup")
     if args.notes is not None:
         entry["notes"] = args.notes
+    if args.chased is not None:
+        # Recording a chase against a closed application would fake activity
+        # on something that has nothing left to chase.
+        if entry.get("status") not in OPEN_STATUSES:
+            raise Usage(f"{args.id} is {entry.get('status')} - nothing to chase")
+        chased = parse_date(args.chased, "chased") if args.chased else args.today
+        notes = str(entry.get("notes") or "")
+        entry["notes"] = (f"{notes}; " if notes else "") + f"chased {chased}"
+        # A chase restarts the clock; an explicit --followup below still wins.
+        entry["followup"] = (date.fromisoformat(chased)
+                             + timedelta(days=FOLLOWUP_DAYS)).isoformat()
+    if args.followup:
+        entry["followup"] = parse_date(args.followup, "followup")
     save(client_dir, doc)
     return {"updated": entry}
 
@@ -196,6 +235,7 @@ def cmd_followup(args) -> dict:
     for a in due:
         a["days_overdue"] = (date.fromisoformat(on)
                              - date.fromisoformat(a["followup"])).days
+        a["chases"] = len(chase_dates(a))     # how many times already chased
     return {"due": due, "count": len(due), "on": on}
 
 
@@ -214,13 +254,19 @@ def render(verb: str, data: dict) -> str:
             return f"nothing due as of {data['on']}"
         rows = [f"  {a['id']}  {a['days_overdue']:>3}d  "
                 f"{(a.get('company') or '?')} - {(a.get('role') or '?')}"
-                f"  (due {a['followup']})" for a in due]
+                f"  (due {a['followup']}"
+                + (f", chased x{a['chases']}" if a.get("chases") else "") + ")"
+                for a in due]
         return f"{len(due)} follow-up(s) due as of {data['on']}:\n" + "\n".join(rows)
     apps = data["applications"]
     if not apps:
         return "no applications recorded"
     rows = [f"  {a['id']}  {a.get('status',''):<9} {a.get('applied',''):<11} "
-            f"{(a.get('company') or '?')} - {(a.get('role') or '?')}" for a in apps]
+            f"{(a.get('company') or '?')} - {(a.get('role') or '?')}"
+            + (f"  · quiet {a['days_quiet']}d" if a.get("days_quiet") is not None
+               else "")
+            + (f" · chased x{a['chases']}" if a.get("chases") else "")
+            for a in apps]
     return f"{len(apps)} application(s):\n" + "\n".join(rows)
 
 
@@ -249,6 +295,9 @@ def main(argv=None, today=None):
     s = sub.add_parser("set", parents=[common]); s.set_defaults(fn=cmd_set)
     s.add_argument("client_dir"); s.add_argument("id")
     s.add_argument("--status"); s.add_argument("--followup"); s.add_argument("--notes")
+    s.add_argument("--chased", nargs="?", const="", metavar="DATE",
+                   help="record a chase sent on DATE (default: today); "
+                        "restarts the follow-up clock")
 
     args = ap.parse_args(argv)
     args.today = today or date.today().isoformat()

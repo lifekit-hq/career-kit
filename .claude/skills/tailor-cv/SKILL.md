@@ -91,6 +91,8 @@ private: never name a client in a file that gets committed.
 - **Never write `" - "` (space-hyphen-space) inside a bullet.** RenderCV parses it as a
   new list item and silently splits the bullet in two, in the PDF *and* the ATS text.
   Use a comma, a semicolon, or a rewrite. `generate.py` hard-fails the build on it.
+- **Quote a bullet that holds `": "` (colon-space)**, or use a comma or a semicolon
+  instead. YAML parses the unquoted form as a mapping and the build hard-fails naming it.
 - **Keep the YAML plain ASCII.** Model-drafted prose carries no-break spaces, curly
   quotes and zero-width characters; a non-Latin lookalike (Cyrillic `а` in "Manager")
   makes the keyword unmatchable to an ATS. The build folds the invisible ones and

@@ -32,6 +32,10 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   grows modes; a new behavior is a new verb.
 - **client** - resolved from `-c`, else `clients/.default`. Every command
   operates on exactly one client.
+- **application id** - a ledger row (`apply` lane) is keyed by the posting's
+  own vacancy id, read from the capture (`jobId`); a capture without one needs
+  an explicit `--id`, and the same id twice is a usage error unless `--reapply`
+  (which suffixes it). The tool never mints an id of its own.
 
 `bin/cv` remains as a back-compat alias for the `cv` lane.
 

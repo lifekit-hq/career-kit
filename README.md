@@ -64,7 +64,8 @@ bin/career linkedin diff                     # compare the two latest snapshots
 bin/career linkedin audit                    # rubric-score the latest profile snapshot
 
 bin/career cv letter <jd-snapshot> openai    # grounded input pack for a cover letter
-bin/career apply add <jd-snapshot> --variant openai   # record an application you sent
+bin/career apply add <jd-snapshot> --variant openai   # record an application you sent (row id = the posting's vacancy id)
+bin/career apply set <vacancy-id> --chased   # record a chase against that posting
 bin/career apply followup                    # what's due to chase
 ```
 

@@ -53,11 +53,39 @@ class Add(Base):
         self.assertEqual(d["added"]["applied"], TODAY)
         self.assertEqual(d["added"]["followup"], "2026-08-28")
 
-    def test_ids_increment_and_the_ledger_accumulates(self):
-        self.add()
+    def test_the_row_id_is_the_postings_vacancy_id(self):
+        # It is what the applicant sees on the posting and types when chasing,
+        # and the one thing that tells two live postings of a role apart.
         _, d = self.add()
-        self.assertEqual(d["added"]["id"], "a002")
-        self.assertEqual(d["count"], 2)
+        self.assertEqual(d["added"]["id"], "4437630034")
+
+    def test_recording_the_same_posting_twice_is_a_usage_error(self):
+        self.add()
+        code, _ = self.add()
+        self.assertEqual(code, 2)
+        self.assertEqual(self.run_cli("list", str(self.client))[1]["count"], 1)
+
+    def test_reapply_records_a_second_row_with_a_suffixed_id(self):
+        self.add()
+        _, d = self.add("--reapply")
+        self.assertEqual(d["added"]["id"], "4437630034-2")
+        _, d = self.add("--reapply")
+        self.assertEqual(d["added"]["id"], "4437630034-3")
+        self.assertEqual(d["count"], 3)
+
+    def test_a_capture_without_a_vacancy_id_requires_an_explicit_id(self):
+        # A careers-page snapshot has no jobId; guessing one would be worse
+        # than refusing.
+        (self.snap / "job.json").write_text(json.dumps(
+            {k: v for k, v in JOB.items() if k != "jobId"}))
+        code, _ = self.add()
+        self.assertEqual(code, 2)
+        _, d = self.add("--id", "acme-2026-09")
+        self.assertEqual(d["added"]["id"], "acme-2026-09")
+
+    def test_an_explicit_id_wins_over_the_captures(self):
+        _, d = self.add("--id", "custom")
+        self.assertEqual(d["added"]["id"], "custom")
 
     def test_a_bare_capture_timestamp_resolves(self):
         _, d = self.run_cli("add", str(self.client), "2026-08-19T14-50-08Z")
@@ -82,7 +110,7 @@ class ListAndSet(Base):
 
     def test_status_filter(self):
         self.add()
-        self.run_cli("set", str(self.client), "a001", "--status", "interview")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "interview")
         _, d = self.run_cli("list", str(self.client), "--status", "interview")
         self.assertEqual(d["count"], 1)
         _, d = self.run_cli("list", str(self.client), "--status", "sent")
@@ -91,12 +119,12 @@ class ListAndSet(Base):
     def test_a_terminal_status_clears_the_followup_date(self):
         # Otherwise a rejected application keeps surfacing in the chase queue.
         self.add()
-        _, d = self.run_cli("set", str(self.client), "a001", "--status", "rejected")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "rejected")
         self.assertIsNone(d["updated"]["followup"])
 
     def test_unknown_status_and_unknown_id_are_usage_errors(self):
         self.add()
-        self.assertEqual(self.run_cli("set", str(self.client), "a001",
+        self.assertEqual(self.run_cli("set", str(self.client), "4437630034",
                                       "--status", "vibing")[0], 2)
         self.assertEqual(self.run_cli("set", str(self.client), "a999",
                                       "--status", "replied")[0], 2)
@@ -127,19 +155,19 @@ class Followup(Base):
     def test_a_rejected_application_drops_out_of_the_queue(self):
         # Its followup was cleared at set-time; this guards both halves.
         self.add("--applied", "2026-08-19")
-        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "rejected")
         self.assertEqual(self.due("2026-09-30")["count"], 0)
 
     def test_a_replied_application_is_still_worth_chasing(self):
         self.add("--applied", "2026-08-19")
-        self.run_cli("set", str(self.client), "a001", "--status", "replied")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "replied")
         self.assertEqual(self.due("2026-08-30")["count"], 1)
 
     def test_most_overdue_first(self):
         self.add("--applied", "2026-08-10")           # followup 08-17
-        self.add("--applied", "2026-08-19")           # followup 08-26
+        self.add("--applied", "2026-08-19", "--reapply")   # followup 08-26
         due = self.due("2026-08-30")["due"]
-        self.assertEqual([a["id"] for a in due], ["a001", "a002"])
+        self.assertEqual([a["id"] for a in due], ["4437630034", "4437630034-2"])
         self.assertGreater(due[0]["days_overdue"], due[1]["days_overdue"])
 
 
@@ -155,7 +183,7 @@ class Chasing(Base):
 
     def test_a_chase_restarts_the_quiet_clock_and_the_followup(self):
         self.add("--applied", "2026-08-01")
-        _, d = self.run_cli("set", str(self.client), "a001",
+        _, d = self.run_cli("set", str(self.client), "4437630034",
                             "--chased", "2026-08-15")
         self.assertIn("chased 2026-08-15", d["updated"]["notes"])
         self.assertEqual(d["updated"]["followup"], "2026-08-22")   # chase + 7
@@ -165,37 +193,37 @@ class Chasing(Base):
 
     def test_a_bare_chased_flag_means_today(self):
         self.add("--applied", "2026-08-01")
-        _, d = self.run_cli("set", str(self.client), "a001", "--chased")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--chased")
         self.assertIn(f"chased {TODAY}", d["updated"]["notes"])
 
     def test_chasing_keeps_existing_notes(self):
         self.add("--notes", "referred by a friend")
-        _, d = self.run_cli("set", str(self.client), "a001", "--chased")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--chased")
         self.assertEqual(d["updated"]["notes"],
                          f"referred by a friend; chased {TODAY}")
 
     def test_an_explicit_followup_beats_the_chase_bump(self):
         self.add()
-        _, d = self.run_cli("set", str(self.client), "a001",
+        _, d = self.run_cli("set", str(self.client), "4437630034",
                             "--chased", "--followup", "2026-09-15")
         self.assertEqual(d["updated"]["followup"], "2026-09-15")
 
     def test_chasing_a_closed_application_is_a_usage_error(self):
         self.add()
-        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
-        code, _ = self.run_cli("set", str(self.client), "a001", "--chased")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "rejected")
+        code, _ = self.run_cli("set", str(self.client), "4437630034", "--chased")
         self.assertEqual(code, 2)
 
     def test_a_terminal_application_has_no_quiet_to_measure(self):
         self.add("--applied", "2026-08-10")
-        self.run_cli("set", str(self.client), "a001", "--status", "ghosted")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "ghosted")
         _, d = self.run_cli("list", str(self.client))
         self.assertIsNone(d["applications"][0]["days_quiet"])
 
     def test_a_hand_written_chase_marker_counts_too(self):
         # The marker is the format, not the flag - hand edits stay first-class.
         self.add()
-        self.run_cli("set", str(self.client), "a001",
+        self.run_cli("set", str(self.client), "4437630034",
                      "--notes", "pinged recruiter, chased 2026-08-25, no reply")
         _, d = self.run_cli("followup", str(self.client), "--on", "2026-09-30")
         self.assertEqual(d["due"][0]["chases"], 1)
@@ -246,10 +274,15 @@ class HandEditedLedger(Base):
         self.write("applications:\n- just a string\n")
         self.assertEqual(self.run_cli("list", str(self.client))[0], 2)
 
-    def test_a_hand_written_id_does_not_break_the_next_generated_one(self):
-        self.write("applications:\n- id: pardgroup-aug\n  status: sent\n")
+    def test_a_hand_written_or_legacy_id_is_still_addressable(self):
+        # Rows from before vacancy ids (a001) and hand-typed ids are just ids.
+        self.write("applications:\n- id: a001\n  status: sent\n"
+                   "- id: pardgroup-aug\n  status: sent\n")
+        _, d = self.run_cli("set", str(self.client), "a001", "--status", "replied")
+        self.assertEqual(d["updated"]["status"], "replied")
         _, d = self.add()
-        self.assertEqual(d["added"]["id"], "a001")
+        self.assertEqual(d["added"]["id"], "4437630034")
+        self.assertEqual(d["count"], 3)
 
 
 class Reopening(Base):
@@ -257,20 +290,20 @@ class Reopening(Base):
         # Otherwise it reads as live while being invisible to `followup`
         # forever - the exact lost thread the ledger exists to prevent.
         self.add("--applied", "2026-08-10")
-        self.run_cli("set", str(self.client), "a001", "--status", "rejected")
-        _, d = self.run_cli("set", str(self.client), "a001", "--status", "sent")
+        self.run_cli("set", str(self.client), "4437630034", "--status", "rejected")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "sent")
         self.assertEqual(d["updated"]["followup"], "2026-08-28")   # today + 7
 
     def test_an_explicit_followup_still_wins_over_the_restored_one(self):
         self.add()
-        self.run_cli("set", str(self.client), "a001", "--status", "ghosted")
-        _, d = self.run_cli("set", str(self.client), "a001",
+        self.run_cli("set", str(self.client), "4437630034", "--status", "ghosted")
+        _, d = self.run_cli("set", str(self.client), "4437630034",
                             "--status", "sent", "--followup", "2026-09-01")
         self.assertEqual(d["updated"]["followup"], "2026-09-01")
 
     def test_reopening_does_not_disturb_a_followup_that_is_still_set(self):
         self.add("--applied", "2026-08-10")
-        _, d = self.run_cli("set", str(self.client), "a001", "--status", "replied")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "replied")
         self.assertEqual(d["updated"]["followup"], "2026-08-17")
 
 

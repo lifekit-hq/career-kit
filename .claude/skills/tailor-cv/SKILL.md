@@ -39,9 +39,12 @@ private: never name a client in a file that gets committed.
 2. **List the JD's requirements** before drafting - every stated requirement and
    named nice-to-have. Each one ends up either matched by the CV or **honestly
    gapped - never silently omitted**: a requirement the client lacks (a tool, a
-   clearance, years) gets a truthful bridge in the letter ("not in my daily
-   toolkit yet; a natural extension of X"), because omission reads as hiding the
-   moment an interviewer asks. Check the finished draft against this list.
+   clearance, years) is never claimed, and in the letter it gets **one
+   forward-facing sentence at most** ("X itself would be new to me; the
+   discipline it demands is what I already bring"), never a paragraph of
+   confession. "I have not done X and I won't pretend" reads as miserable and
+   loses the reader before the evidence; the full honest answer belongs in the
+   interview, where it is asked. Check the finished draft against this list.
 3. **Draft the variant** `clients/<client>/variants/<name>.yml`:
    - `headline`, `summary` — rewritten for the role (prose lives in the variant).
    - `experience_order` — select/order roles by key; drop irrelevant ones.
@@ -109,7 +112,12 @@ private: never name a client in a file that gets committed.
 - **Cover letter**: `bin/career cv letter <jd-snapshot> <name> -c <client>` returns the
   facts the letter may stand on, the JD language the CV already backs, and the language
   nothing backs. **You** write the prose from that pack - the verb deliberately does not,
-  and nothing in the letter may rest on a term in `unevidenced`.
+  and nothing in the letter may rest on a term in `unevidenced`. The letter is a reason
+  plus evidence in a voice the client would say out loud: no parts bill (cipher names,
+  token formats, monitoring tools belong on the CV, the letter says why they mattered),
+  no apology, no defensive framing ("the best evidence I can offer"), no JD phrase
+  mirrored into the self-description. The credibility review (step 8) reads the letter
+  too, and letters are versioned beside the CV (`letter-v<N>.md`).
 - **Freeze it**: `bin/career cv version <name> <jd-snapshot> -c <client>` builds and
   freezes the cut as `applications/<company>/<vacancy-id>-<title>/v<N>/` with a
   `REVIEW.md` skeleton. The grounding findings, the credibility read and the verdict

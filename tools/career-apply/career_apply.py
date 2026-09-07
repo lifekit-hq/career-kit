@@ -1,6 +1,6 @@
 """career apply - the application ledger.
 
-    python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] [--id X] [--reapply] ...
+    python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] [--version vN] [--id X] [--reapply] ...
     python3 career_apply.py list <client-dir> [--status S] [--json]
     python3 career_apply.py set  <client-dir> <id> [--status S] [--followup D] ...
     python3 career_apply.py followup <client-dir> [--on DATE] [--json]
@@ -177,6 +177,7 @@ def cmd_add(args) -> dict:
         "role": job.get("title"),
         "source": job.get("source"),
         "variant": args.variant,
+        "version": args.version,
         "applied": applied,
         "channel": args.channel,
         "status": "sent",
@@ -261,8 +262,9 @@ def render(verb: str, data: dict) -> str:
     if verb == "add":
         e = data["added"]
         return (f"→ {e['id']}  {e['company']} - {e['role']}\n"
-                f"  variant {e['variant'] or '(none)'} · applied {e['applied']} · "
-                f"follow up {e['followup']}")
+                f"  variant {e['variant'] or '(none)'}"
+                + (f" {e['version']}" if e.get('version') else "")
+                + f" · applied {e['applied']} · follow up {e['followup']}")
     if verb == "set":
         e = data["updated"]
         return f"→ {e['id']}  status {e['status']} · follow up {e['followup'] or '-'}"
@@ -281,6 +283,7 @@ def render(verb: str, data: dict) -> str:
         return "no applications recorded"
     rows = [f"  {a['id']}  {a.get('status',''):<9} {a.get('applied',''):<11} "
             f"{(a.get('company') or '?')} - {(a.get('role') or '?')}"
+            + (f"  [{a['version']}]" if a.get("version") else "")
             + (f"  · quiet {a['days_quiet']}d" if a.get("days_quiet") is not None
                else "")
             + (f" · chased x{a['chases']}" if a.get("chases") else "")
@@ -302,6 +305,7 @@ def main(argv=None, today=None):
     a.add_argument("client_dir"); a.add_argument("jd")
     a.add_argument("--variant"); a.add_argument("--channel", default="linkedin")
     a.add_argument("--id", help="vacancy id, when the capture carries none")
+    a.add_argument("--version", help="the frozen cut that was sent (career cv version), e.g. v2")
     a.add_argument("--reapply", action="store_true",
                    help="record a genuine second application to the same posting")
     a.add_argument("--applied"); a.add_argument("--followup"); a.add_argument("--notes")

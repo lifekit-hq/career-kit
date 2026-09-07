@@ -16,7 +16,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
 
   | Lane | Verbs (implemented) | Verbs (planned) |
   |------|---------------------|-----------------|
-  | `cv` | `build`, `ats`, `match`, `lint`, `letter` | - |
+  | `cv` | `build`, `ats`, `match`, `lint`, `letter`, `version` | - |
   | `linkedin` | `capture`, `diff`, `audit`, `jd`, `keywords`, `benchmark` | - |
   | `apply` | `add`, `list`, `set`, `followup` | - |
   | `portfolio` | - | (lane reserved) |
@@ -32,6 +32,12 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   grows modes; a new behavior is a new verb.
 - **client** - resolved from `-c`, else `clients/.default`. Every command
   operates on exactly one client.
+- **version** - `cv version <variant> <jd-snapshot>` builds the variant and
+  freezes the cut as `clients/<c>/applications/<company>/<vacancy-id>-<title>/v<N>/`
+  (the variant, the merged RenderCV input, the PDF, the ATS text, and a
+  `REVIEW.md` skeleton), appending a row to that application's `VERSIONS.md`.
+  A `v<N>/` is never written twice; a build that is not one page is refused
+  (exit 1). `apply add --version v<N>` records which frozen cut was sent.
 - **application id** - a ledger row (`apply` lane) is keyed by the posting's
   own vacancy id, read from the capture (`jobId`); a capture without one needs
   an explicit `--id`, and the same id twice is a usage error unless `--reapply`

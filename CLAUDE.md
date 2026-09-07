@@ -28,8 +28,10 @@ bin/career linkedin keywords [variant] [-c client]  # JD keyword corpus, marked 
 bin/career linkedin benchmark <snap-dir>...  # target model from reference-profile captures (ad-hoc out-dirs)
 
 bin/career cv letter <jd-snapshot> [variant] [-c client]  # grounded pack for a cover letter (facts, matched JD language, unbacked terms, scaffold)
+bin/career cv version <variant> <jd-snapshot> [--id X] [-c client]  # build + freeze an immutable cut: applications/<company>/<vacancy-id>-<title>/v<N>/
+                                          # (variant.yml, cv.rendercv.yaml, CV.pdf, CV.md, REVIEW.md skeleton) + a VERSIONS.md row; refuses a 2-page build
 
-bin/career apply add <jd-snapshot> [--variant v] [--id X] [--reapply] [-c client]  # record an application (company/role read from the capture)
+bin/career apply add <jd-snapshot> [--variant v] [--version vN] [--id X] [--reapply] [-c client]  # record an application (company/role read from the capture; --version = the frozen cut sent)
                                           # row id = the posting's vacancy id (jobId); --id when the capture has none;
                                           # the same posting twice is refused unless --reapply (id gets a -2 suffix)
 bin/career apply list [--status s] [-c client]  # the ledger (+ derived days-quiet / chase count)
@@ -64,7 +66,7 @@ The CV engine is a **three-layer split** that RenderCV itself has no concept of 
 
 `generate.py` resolves the client (`-c`, else `clients/.default`), then: deep-copies that client's profile, overlays the variant (`merge()`), translates the authoring schema into a RenderCV input file (`to_rendercv()`), and RenderCV renders it to PDF + Markdown. **The RenderCV Markdown *is* the ATS text** — that's why `ats`/`match` read from `build/<client>/<variant>/*_CV.md`.
 
-Beyond the CV engine, a client dir also holds `captures/` (dated LinkedIn snapshots — `<ISO-timestamp>/` dirs with a `manifest.json`, append-only evidence; legacy flat captures are wrapped as a snapshot with `"legacy": true`) and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/`, one directory per verb-family, each with its own tests: `linkedin-scrape/`, `linkedin-diff/`, `linkedin-audit/`, `linkedin-benchmark/`, `jd-intel/` (the `keywords` verb), `career-lint/`, `career-apply/` (the application ledger), `career-letter/`, `career-doctor/`, and `career-cli/` (contract-level tests over `bin/career` itself: the `--json` envelope, exit codes, and the no-client-identities privacy guard).
+Beyond the CV engine, a client dir also holds `captures/` (dated LinkedIn snapshots — `<ISO-timestamp>/` dirs with a `manifest.json`, append-only evidence; legacy flat captures are wrapped as a snapshot with `"legacy": true`) `applications/<company>/<vacancy-id>-<title-kebab>/` (one folder per posting: `VERSIONS.md`, the letter, and immutable `v<N>/` cuts frozen by `career cv version`; see `examples/applications/` for the fabricated layout), and `docs/` (intake, strategy, research). Standalone tooling lives under `tools/`, one directory per verb-family, each with its own tests: `linkedin-scrape/`, `linkedin-diff/`, `linkedin-audit/`, `linkedin-benchmark/`, `jd-intel/` (the `keywords` verb), `career-lint/`, `career-apply/` (the application ledger), `career-letter/`, `career-doctor/`, and `career-cli/` (contract-level tests over `bin/career` itself: the `--json` envelope, exit codes, and the no-client-identities privacy guard).
 
 ### `generate.py` internals
 

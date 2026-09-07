@@ -71,7 +71,11 @@ private: never name a client in a file that gets committed.
   facts the letter may stand on, the JD language the CV already backs, and the language
   nothing backs. **You** write the prose from that pack - the verb deliberately does not,
   and nothing in the letter may rest on a term in `unevidenced`.
-- **Record it**: `bin/career apply add <jd-snapshot> --variant <name> -c <client>` once
+- **Freeze it**: `bin/career cv version <name> <jd-snapshot> -c <client>` builds and
+  freezes the cut as `applications/<company>/<vacancy-id>-<title>/v<N>/` with a
+  `REVIEW.md` skeleton. Write the review and the verdict there; never edit a `v<N>/`
+  afterwards, cut the next one. A version is never overwritten.
+- **Record it**: `bin/career apply add <jd-snapshot> --variant <name> --version v<N> -c <client>` once
   the application is actually sent. Only record what was really submitted - a ledger
   that invents history is worse than no ledger.
 - **Chase it**: `bin/career apply followup -c <client>`.

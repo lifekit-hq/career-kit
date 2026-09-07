@@ -103,6 +103,8 @@ straight to a recruiter:
 
 - **Never write `" - "` inside a bullet.** RenderCV parses it as a new list item
   and splits the bullet in two, in the PDF *and* the ATS text.
+- **Quote a bullet that holds `": "`.** YAML reads a plain scalar with a
+  colon-space as a mapping, not text; the build fails naming the bullet.
 - **Keep the text plain ASCII.** Invisible and exotic-space characters are
   folded automatically; a non-Latin lookalike (a Cyrillic `а` in "Manager")
   hard-fails the build, because an ATS keyword search never matches it.

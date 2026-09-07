@@ -61,6 +61,34 @@ class CheckHighlights(unittest.TestCase):
             generate.to_rendercv(cfg, {})
 
 
+class CheckBulletTypes(unittest.TestCase):
+    """A plain YAML scalar holding ": " parses as a one-key mapping. Passed
+    through, RenderCV dies with an opaque KeyError and the build prints
+    nothing. See #50."""
+
+    def test_mapping_bullet_is_rejected_naming_the_bullet(self):
+        cfg = cfg_with_bullets({"Built the service for its frontend": "one API surface."})
+        with self.assertRaises(SystemExit) as ctx:
+            generate.to_rendercv(cfg, {})
+        msg = str(ctx.exception)
+        self.assertIn("Built the service for its frontend: one API surface.", msg)
+        self.assertIn('": "', msg)
+        self.assertIn("1 bullet(s)", msg)
+
+    def test_quoted_colon_bullet_is_fine(self):
+        # The same text as a real string (what quoting it in YAML yields).
+        generate.to_rendercv(
+            cfg_with_bullets("Built the service for its frontend: one API surface."), {})
+
+    def test_project_and_education_bullets_are_checked_too(self):
+        cfg = dict(CFG, sections=["projects"],
+                   projects=[{"name": "p", "url": "https://e.com",
+                              "bullets": [{"a": "b"}]}])
+        with self.assertRaises(SystemExit) as ctx:
+            generate.to_rendercv(cfg, {})
+        self.assertIn("[Projects] a: b", str(ctx.exception))
+
+
 class Merge(unittest.TestCase):
     def test_variant_headline_replaces_the_profile_headline(self):
         merged = generate.merge(CFG, {"headline": "Social Media Manager | Reels"})

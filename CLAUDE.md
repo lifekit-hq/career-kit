@@ -81,6 +81,9 @@ To add a new section type, add a builder to `BUILDERS` and reference its name in
   item and splits that bullet into two, in the rendered PDF *and* in the ATS Markdown. Use a comma,
   a semicolon, or a rewrite instead. The same string is fine in `summary` and in `location`, which
   are not list items. `generate.py` enforces this and fails the build naming the offending bullets.
+- **A bullet holding `": "` (colon-space) must be quoted.** To YAML a plain scalar with `": "`
+  inside is a one-key mapping, not text; unguarded, RenderCV dies with an opaque `KeyError`.
+  `generate.py` fails the build naming the bullet. Quote it, or use a comma or a semicolon.
 - **Keep CV text plain ASCII.** `generate.py` silently deletes invisible controls
   (zero-width, bidi, soft hyphen, variation selectors) and folds exotic spaces (NBSP,
   thin, narrow-NBSP) to `U+0020` across every rendered field, then **hard-errors** on a

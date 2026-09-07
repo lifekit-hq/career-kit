@@ -38,6 +38,8 @@ experience:
     start: Jan. 2023
     end: Present
     bullets:
+      # Never " - " inside a bullet (RenderCV splits it); quote a bullet that
+      # holds ": " (YAML would read it as a mapping). The build enforces both.
       - Did a concrete thing that had a measurable outcome.
       - Owned a system; describe scope and impact.
 

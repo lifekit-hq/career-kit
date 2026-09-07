@@ -260,6 +260,32 @@ def _check_confusables(cv: dict) -> None:
 BULLET_SPLITTER = " - "
 
 
+def _bullet_text(h) -> str:
+    """How the offending bullet read in the YAML, so the message names it."""
+    if isinstance(h, dict):
+        return "; ".join(f"{k}: {v}" for k, v in h.items())
+    return repr(h)
+
+
+def _check_bullet_types(sections: dict) -> None:
+    # A plain scalar holding ": " is a one-key mapping to YAML, not a string.
+    # Passed through, RenderCV dies with an opaque KeyError deep in its error
+    # handler and the build prints nothing. Name the bullet instead.
+    bad = [(title, _bullet_text(h))
+           for title, entries in sections.items()
+           for entry in entries if isinstance(entry, dict)
+           for h in entry.get("highlights", [])
+           if not isinstance(h, str)]
+    if not bad:
+        return
+    listing = "\n".join(f"  [{title}] {h}" for title, h in bad)
+    raise SystemExit(
+        f"{len(bad)} bullet(s) are not plain strings. A bullet written as a "
+        'plain YAML scalar with ": " inside is parsed as a mapping, not text.\n'
+        "Quote the bullet, or replace the colon-space with a comma or a "
+        "semicolon:\n" + listing)
+
+
 def _check_highlights(sections: dict) -> None:
     bad = [(title, h)
            for title, entries in sections.items()
@@ -286,6 +312,7 @@ def to_rendercv(cfg: dict, design: dict) -> dict:
         if entries:
             sections[title] = entries
     cv["sections"] = sections
+    _check_bullet_types(sections)
     # Fold before the check below: an NBSP-wrapped separator has to reach it as
     # a plain " - " to be caught at all.
     cv = _fold_unicode(cv)

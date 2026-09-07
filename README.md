@@ -33,7 +33,7 @@ data/design.yaml               shared RenderCV look (committed)
 docs/CONTRACT.md               the contract every verb honors
 tools/<verb-family>/           one dir per tool, each with its own tests
 examples/profile.example.yml   the schema, with fabricated data
-.claude/skills/tailor-cv/      the /tailor-cv orchestration skill
+.claude/skills/tailor-cv/      the /tailor-cv skill: draft, build, grounding review, credibility review, verdict, freeze
 
 clients/<client>/              PRIVATE (gitignored) - one dir per person
   profile.yml                  the scaffold (facts, keyed experience)

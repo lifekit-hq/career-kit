@@ -83,6 +83,12 @@ class Add(Base):
         _, d = self.add("--id", "acme-2026-09")
         self.assertEqual(d["added"]["id"], "acme-2026-09")
 
+    def test_the_frozen_version_that_was_sent_is_recorded_and_listed(self):
+        _, d = self.add("--variant", "pardgroup", "--version", "v2")
+        self.assertEqual(d["added"]["version"], "v2")
+        _, d = self.run_cli("list", str(self.client))
+        self.assertEqual(d["applications"][0]["version"], "v2")
+
     def test_an_explicit_id_wins_over_the_captures(self):
         _, d = self.add("--id", "custom")
         self.assertEqual(d["added"]["id"], "custom")

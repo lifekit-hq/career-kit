@@ -27,6 +27,7 @@ VERBS = [
     ("cv", "match", ["baseline", "/nonexistent.txt"]),
     ("cv", "lint", []),
     ("cv", "letter", ["captures/nope"]),
+    ("cv", "version", ["baseline", "captures/nope"]),
     ("linkedin", "capture", []),
     ("linkedin", "diff", []),
     ("linkedin", "audit", []),

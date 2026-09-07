@@ -4,6 +4,7 @@
 #
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
 #   career cv letter <jd-snapshot> [variant]  grounded input pack for a cover letter
+#   career cv version <variant> <jd-snapshot> [--id X]  build + freeze an immutable v<N> of an application
 #   career apply add|list|set [...]           application ledger
 #   career doctor                             preflight: what is missing before a verb needs it
 #   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
@@ -26,6 +27,7 @@ BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
 APPLY="$ROOT/tools/career-apply/career_apply.py"
 DOCTOR="$ROOT/tools/career-doctor/career_doctor.py"
 LETTER="$ROOT/tools/career-letter/career_letter.py"
+VERSION="$ROOT/tools/career-version/career_version.py"
 
 client="" json=0
 args=()
@@ -187,6 +189,22 @@ case "$lane" in
         emit_tool python3 "$LETTER" "${largs[@]}"
       else
         exec python3 "$LETTER" "${largs[@]}"
+      fi
+    fi
+    if [ "$verb" = version ]; then
+      # Build first (a version is a candidate, and a candidate renders), then
+      # freeze what was built. Everything after the two positionals (--id)
+      # passes through to the tool.
+      variant="${3:-}"; snap="${4:-}"
+      [ -n "$variant" ] && [ -n "$snap" ] || usage_fail "usage: career cv version <variant> <jd-snapshot> [--id X]"
+      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      [ -f "$vfile" ] || usage_fail "no variant file: $vfile"
+      "$ROOT/bin/cv" build "$variant" -c "$client" >/dev/null || fail "cv build $variant failed"
+      vargs=("$ROOT/clients/$client" "$vfile" "$snap" "$ROOT/build/$client/$variant" "${@:5}")
+      if [ "$json" = 1 ]; then
+        emit_tool python3 "$VERSION" "${vargs[@]}"
+      else
+        exec python3 "$VERSION" "${vargs[@]}"
       fi
     fi
     case "$verb" in

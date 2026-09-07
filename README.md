@@ -40,6 +40,7 @@ clients/<client>/              PRIVATE (gitignored) - one dir per person
   variants/<role>.yml          the framing (select/order/prose overrides)
   captures/<ISO>/              dated LinkedIn + job-post snapshots
   applications.yml             the application ledger
+  applications/<company>/<vacancy-id>-<title>/   one folder per posting: VERSIONS.md, letter, immutable v<N>/ cuts
   docs/                        intake, strategy, research
 build/<client>/<variant>/      generated output (gitignored)
 ```
@@ -64,7 +65,8 @@ bin/career linkedin diff                     # compare the two latest snapshots
 bin/career linkedin audit                    # rubric-score the latest profile snapshot
 
 bin/career cv letter <jd-snapshot> openai    # grounded input pack for a cover letter
-bin/career apply add <jd-snapshot> --variant openai   # record an application you sent (row id = the posting's vacancy id)
+bin/career cv version openai <jd-snapshot>   # build + freeze the cut as applications/<company>/<vacancy-id>-<title>/v<N>/
+bin/career apply add <jd-snapshot> --variant openai --version v2   # record an application you sent (row id = the posting's vacancy id)
 bin/career apply set <vacancy-id> --chased   # record a chase against that posting
 bin/career apply followup                    # what's due to chase
 ```

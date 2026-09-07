@@ -1,6 +1,6 @@
 """career apply - the application ledger.
 
-    python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] ...
+    python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] [--id X] [--reapply] ...
     python3 career_apply.py list <client-dir> [--status S] [--json]
     python3 career_apply.py set  <client-dir> <id> [--status S] [--followup D] ...
     python3 career_apply.py followup <client-dir> [--on DATE] [--json]
@@ -11,7 +11,10 @@ like the rest of clients/ (PRIVATE.md), append-mostly, and readable by hand -
 the point is that a human can audit it, not that a tool can parse it fast.
 
 `add` reads the job snapshot's job.json for company/title/source so the ledger
-never restates by hand what the capture already knows.
+never restates by hand what the capture already knows. The row's `id` is the
+posting's own vacancy id (`jobId`), the one thing that tells two live postings
+of the same role apart and the thing a human already types when chasing; a
+capture without one needs an explicit `--id`, never a guessed counter.
 
 Exit codes: 0 = ok, 1 = operational failure, 2 = usage error.
 """
@@ -80,10 +83,25 @@ def save(client_dir: Path, doc: dict) -> None:
         encoding="utf-8")
 
 
-def next_id(apps: list) -> str:
-    used = {int(a["id"][1:]) for a in apps
-            if isinstance(a.get("id"), str) and a["id"][1:].isdigit()}
-    return f"a{max(used, default=0) + 1:03d}"
+def row_id(apps: list, job: dict, explicit, reapply: bool) -> str:
+    """The vacancy id from the capture (or --id when the capture has none).
+    A second row for the same posting is refused: it is almost always the
+    same application recorded twice. A genuine re-application says so with
+    --reapply and gets a suffixed id, so the first row stays intact."""
+    base = explicit or job.get("jobId")
+    if not base:
+        raise Usage("this capture has no vacancy id (jobId) - pass --id <value>")
+    base = str(base)
+    used = {a.get("id") for a in apps}
+    if base not in used:
+        return base
+    if not reapply:
+        raise Usage(f"application {base!r} is already recorded - see: career apply "
+                    "list; pass --reapply if this is a genuine second application")
+    n = 2
+    while f"{base}-{n}" in used:
+        n += 1
+    return f"{base}-{n}"
 
 
 def read_job(snap: Path) -> dict:
@@ -153,7 +171,7 @@ def cmd_add(args) -> dict:
         rel = str(snap.resolve())
 
     entry = {
-        "id": next_id(doc["applications"]),
+        "id": row_id(doc["applications"], job, args.id, args.reapply),
         "jd": rel,
         "company": job.get("company"),
         "role": job.get("title"),
@@ -283,6 +301,9 @@ def main(argv=None, today=None):
     a = sub.add_parser("add", parents=[common]); a.set_defaults(fn=cmd_add)
     a.add_argument("client_dir"); a.add_argument("jd")
     a.add_argument("--variant"); a.add_argument("--channel", default="linkedin")
+    a.add_argument("--id", help="vacancy id, when the capture carries none")
+    a.add_argument("--reapply", action="store_true",
+                   help="record a genuine second application to the same posting")
     a.add_argument("--applied"); a.add_argument("--followup"); a.add_argument("--notes")
 
     l = sub.add_parser("list", parents=[common]); l.set_defaults(fn=cmd_list)

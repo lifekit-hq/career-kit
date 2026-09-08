@@ -11,7 +11,7 @@ page:
   show_footer: false
   show_top_note: false
 typography:
-  line_spacing: 0.5em
+  line_spacing: 0.4em
   font_family:
     body: Roboto
     name: Roboto
@@ -31,7 +31,7 @@ header:
     # 'international' keeps the +353 country code in the rendered header.
     phone_number_format: international
 sections:
-  space_between_regular_entries: 0.6em
+  space_between_regular_entries: 0.45em
   space_between_text_based_entries: 0.2em
 entries:
   highlights:

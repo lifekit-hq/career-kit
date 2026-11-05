@@ -185,6 +185,24 @@ class RequirementPhrasesOnly(unittest.TestCase):
                      "Free lunches", "Rust."):
             self.assertFalse(jd_intel.is_heading(line), line)
 
+    def test_an_ampersand_heading_opens_a_dropped_section(self):
+        job = {"title": "Engineer", "description": [
+            "Requirements", "Strong SQL skills", "Perks & Benefits", "Free lunch and gym",
+            "Equity grant"]}
+        got = self.toks(job)
+        self.assertIn("sql", got)
+        for noise in ("lunch", "gym", "equity", "perks"):
+            self.assertNotIn(noise, got, noise)
+
+    def test_a_curly_apostrophe_heading_closes_a_dropped_section(self):
+        job = {"title": "Engineer", "description": [
+            "Benefits & Perks", "Free lunch and gym", "What You\u2019ll Bring",
+            "Kubernetes operations at scale"]}
+        got = self.toks(job)
+        self.assertIn("kubernetes", got)
+        self.assertNotIn("lunch", got)
+        self.assertTrue(jd_intel.is_heading("What You\u2019ll Do"))
+
     def test_a_legal_sentence_is_dropped_wherever_it_sits(self):
         job = {"title": "Engineer", "description": [
             "Build services in Go.", "We consider applicants regardless of gender."]}

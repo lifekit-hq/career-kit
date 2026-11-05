@@ -88,8 +88,8 @@ KEEP_HEADING = re.compile(
     re.I)
 
 
-SMALL_WORDS = {"the", "of", "and", "to", "in", "a", "an", "for", "with", "on", "or", "at"}
-TITLE_WORD = re.compile(r"[A-Z][A-Za-z'&/-]*")
+SMALL_WORDS = {"the", "of", "and", "to", "in", "a", "an", "for", "with", "on", "or", "at", "&"}
+TITLE_WORD = re.compile(r"[A-Z][A-Za-z'\u2019&/-]*")
 
 
 def is_heading(line: str) -> bool:

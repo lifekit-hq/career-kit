@@ -88,11 +88,23 @@ KEEP_HEADING = re.compile(
     re.I)
 
 
+SMALL_WORDS = {"the", "of", "and", "to", "in", "a", "an", "for", "with", "on", "or", "at"}
+TITLE_WORD = re.compile(r"[A-Z][A-Za-z'&/-]*")
+
+
 def is_heading(line: str) -> bool:
+    """A heading ends with a colon, or is a short Title Case phrase. A
+    requirement bullet ("Strong SQL skills", "3+ years of Kubernetes") is never
+    one, so it can neither open nor close a dropped section."""
     line = line.strip()
     if line.endswith(":"):
         return len(line) <= 120
-    return len(line) <= 70 and len(line.split()) <= 10 and not line.endswith((".", ";", ","))
+    words = line.split()
+    if not words or len(words) > 6:
+        return False
+    if not any(TITLE_WORD.fullmatch(w) for w in words):
+        return False
+    return all(TITLE_WORD.fullmatch(w) or w in SMALL_WORDS for w in words)
 
 
 def requirement_lines(job: dict) -> list:

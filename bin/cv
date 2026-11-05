@@ -50,7 +50,7 @@ case "$cmd" in
     echo "→ $(ls "$out"/*_CV.pdf 2>/dev/null | head -1)"
     ;;
   ats)
-    md="$(md_path)"; [ -n "$md" ] || { echo "build $variant first" >&2; exit 1; }
+    md="$(md_path)"; [ -n "$md" ] || { echo "build $variant first (no $out/*_CV.md)" >&2; exit 1; }
     cat "$md"
     ;;
   match)

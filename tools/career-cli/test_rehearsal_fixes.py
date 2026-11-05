@@ -87,6 +87,7 @@ class NotBuiltFailsLoudly(Base):
                 p = self.home.run(*verb)
                 self.assertEqual(p.returncode, 1, p.stdout)
                 self.assertIn("build baseline first", p.stderr)
+                self.assertIn(f"build/{clihome.CLIENT}/baseline", p.stderr)
 
     def test_a_different_variant_names_that_variant(self):
         self.home.snapshot()
@@ -109,6 +110,17 @@ class KeywordsAreRequirementsOnly(Base):
         for noise in ("opportunity", "employer", "regardless", "race", "riverton"):
             self.assertNotIn(noise, missing)
         self.assertTrue(all(w[-1].isalnum() or w[-1] in "+#" for w in missing), missing)
+
+    def test_cv_match_keeps_period_less_requirement_bullets(self):
+        jd = self.home.path / "bullets.txt"
+        jd.write_text("What you'll do\nBuild data pipelines in Python\nRequirements\n"
+                      "3+ years of experience with Kubernetes\nStrong Snowflake skills\n"
+                      "Experience with privacy tooling\nFamiliarity with Terraform and AWS\n")
+        self.home.fake_build()
+        p = self.home.run("cv", "match", "baseline", str(jd), "--json")
+        missing = self.env(p)["data"]["missing"]
+        for word in ("kubernetes", "snowflake", "privacy", "tooling", "terraform", "aws"):
+            self.assertIn(word, missing)
 
     def test_cv_match_still_takes_a_plain_text_jd_file(self):
         self.home.fake_build()

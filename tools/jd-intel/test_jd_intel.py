@@ -99,9 +99,9 @@ POSTING = {
     "description": [
         "About Example Corp",
         "Example Corp builds tools for the future. See https://example.com/careers.",
-        "About the role",
+        "About the Role",
         "You will build audit trails and observability for Riverton customers.",
-        "Minimum requirements",
+        "Minimum Requirements",
         "Strong accountability.",
         "Experience with PostgreSQL, Kubernetes and C++.",
         "Benefits",
@@ -155,10 +155,35 @@ class RequirementPhrasesOnly(unittest.TestCase):
 
     def test_a_requirement_heading_ends_a_dropped_section(self):
         job = {"title": "Engineer", "description": [
-            "Benefits", "Free snacks", "What you will bring", "Rust expertise"]}
+            "Benefits", "Free snacks", "What You Will Bring", "Rust expertise"]}
         got = self.toks(job)
         self.assertIn("rust", got)
         self.assertNotIn("snacks", got)
+
+    def test_period_less_requirement_bullets_are_kept(self):
+        job = {"title": "Engineer", "description": [
+            "What you'll do", "Build data pipelines in Python", "Requirements",
+            "3+ years of experience with Kubernetes", "Strong SQL skills",
+            "Familiarity with Terraform and AWS"]}
+        got = self.toks(job)
+        self.assertTrue({"pipelines", "python", "kubernetes", "sql", "terraform",
+                         "aws"} <= got, got)
+
+    def test_a_bullet_naming_a_dropped_topic_does_not_open_a_dropped_section(self):
+        job = {"title": "Engineer", "description": [
+            "Requirements", "Experience with privacy tooling", "Salary benchmarking skills",
+            "Fluent Rust", "Strong Kafka knowledge"]}
+        got = self.toks(job)
+        self.assertTrue({"privacy", "tooling", "benchmarking", "rust", "kafka"} <= got, got)
+
+    def test_a_title_case_or_colon_line_is_a_heading(self):
+        for line in ("Benefits", "What We Offer", "About the Role", "Your Impact:",
+                     "What you will bring:"):
+            self.assertTrue(jd_intel.is_heading(line), line)
+        for line in ("Strong SQL skills", "3+ years of experience with Kubernetes",
+                     "Experience with privacy tooling", "Build data pipelines in Python",
+                     "Free lunches", "Rust."):
+            self.assertFalse(jd_intel.is_heading(line), line)
 
     def test_a_legal_sentence_is_dropped_wherever_it_sits(self):
         job = {"title": "Engineer", "description": [

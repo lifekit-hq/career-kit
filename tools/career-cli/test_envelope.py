@@ -36,6 +36,7 @@ VERBS = [
     ("linkedin", "benchmark", []),
     ("apply", "list", []),
     ("apply", "add", ["captures/nope"]),
+    ("jd", "add", ["captures/nope"]),
 ]
 
 

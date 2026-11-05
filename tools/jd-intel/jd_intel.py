@@ -1,11 +1,17 @@
 """career linkedin keywords - aggregate JD keywords across job snapshots.
 
     python3 jd_intel.py <job-snapshot-dir>... [--cv <cv-md-file>] [--json]
+    python3 jd_intel.py --missing <cv-md-file> <jd-file | job-snapshot-dir>
 
 Each snapshot dir must contain a job.json (schema li-scrape-job/1). Emits
 keyword document-frequency across the corpus - unigrams plus bigrams that
 repeat - and, when --cv is given, marks which keywords are missing from the
 CV text (the RenderCV markdown, i.e. exactly what an ATS parser sees).
+--missing is the single-posting form behind `career cv match`.
+
+Only what a candidate could be asked to have is counted: EEO and legal
+boilerplate, benefits and company-pitch sections, URLs and the posting's own
+company and place names are dropped before tokenizing (see requirement_lines).
 Stdlib only.
 """
 import json
@@ -41,10 +47,102 @@ STOPWORDS = {
 def tokens(text):
     out = []
     for t in TOKEN.findall(str(text).lower()):
-        t = re.sub(r"[^a-z0-9]+$", "", t)  # strip trailing punctuation
+        # Trailing punctuation is never part of a keyword ("accountability."),
+        # but a trailing + or # is ("c++", "c#").
+        t = re.sub(r"[^a-z0-9+#]+$", "", t)
         if len(t) >= 3 and t not in STOPWORDS:
             out.append(t)
     return out
+
+
+# --- what counts as a requirement ------------------------------------------
+# A posting is mostly not requirements: the EEO statement, the legal notices,
+# the benefits list and the company pitch all carry words ("california",
+# "veteran", "ordinance") that no CV could or should answer.
+
+URL = re.compile(r"(?:https?://|www\.)\S+|\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b"
+                 r"|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|ai|co|dev|gov)\b\S*",
+                 re.I)
+
+# Sentences that are legal or EEO text wherever they sit in the posting.
+BOILERPLATE_LINE = re.compile(
+    r"equal (employment )?opportunity|\beeo\b|affirmative action|regardless of"
+    r"|sexual orientation|gender identity|protected (class|status|characteristic)"
+    r"|\bveterans?\b|disabilit|reasonable accommodation|fair chance|\barrest"
+    r"|\bconvictions?\b|criminal (history|record)|background (check|screen)"
+    r"|e-?verify|privacy (policy|notice|statement)|data protection"
+    r"|\bordinance\b|work authori[sz]ation|visa sponsorship",
+    re.I)
+
+# Headings that open a section nobody answers with a CV, and the headings that
+# return to the part that matters. A section runs until the next recognised one.
+DROP_HEADING = re.compile(
+    r"benefit|perk|what we offer|compensation|salary|\bpay\b|equal opportunity"
+    r"|\beeo\b|diversity|accommodation|privacy|legal|how we.?re different"
+    r"|about (us|the company)|our (mission|values|culture)|why (join|work)",
+    re.I)
+KEEP_HEADING = re.compile(
+    r"\brole\b|\bteam\b|\byou\b|responsibilit|requirement|qualification"
+    r"|\bskills?\b|experience|nice to have|preferred|bonus|minimum|basic"
+    r"|looking for|\bbring\b|impact|\bdo\b|\bwill\b|\bthrive\b",
+    re.I)
+
+
+def is_heading(line: str) -> bool:
+    line = line.strip()
+    if line.endswith(":"):
+        return len(line) <= 120
+    return len(line) <= 70 and len(line.split()) <= 10 and not line.endswith((".", ";", ","))
+
+
+def requirement_lines(job: dict) -> list:
+    """The posting's lines that can state a requirement, in order.
+
+    Lines inside a benefits/EEO/company-pitch section, EEO and legal sentences
+    wherever they sit, and section headings themselves are dropped. A posting
+    with no recognisable headings is kept whole (minus the legal sentences).
+    """
+    company = str(job.get("company") or "").strip().lower()
+    drop_company = (re.compile(r"^about\s+" + re.escape(company) + r"\b", re.I)
+                    if company else None)
+    desc = job.get("description") or []
+    lines = [desc] if isinstance(desc, str) else list(desc)
+    kept, dropping = [], False
+    for raw in lines:
+        line = str(raw).strip()
+        if not line:
+            continue
+        if is_heading(line):
+            if DROP_HEADING.search(line) or (drop_company and drop_company.match(line)):
+                dropping = True
+                continue
+            if KEEP_HEADING.search(line):
+                dropping = False
+                continue
+        if dropping or BOILERPLATE_LINE.search(line):
+            continue
+        kept.append(line)
+    return kept
+
+
+def requirement_text(job: dict) -> str:
+    """Title plus the requirement lines, with URLs and emails removed."""
+    return URL.sub(" ", " ".join(filter(None, [job.get("title") or ""]
+                                        + requirement_lines(job))))
+
+
+def requirement_tokens(job: dict) -> list:
+    """Keyword tokens of the requirement text. The posting's own company and
+    location words are not capabilities anyone could claim, so they go too."""
+    about_them = set(tokens(" ".join(
+        str(job.get(k) or "") for k in ("company", "location"))))
+    return [t for t in tokens(requirement_text(job)) if t not in about_them]
+
+
+def missing_from_cv(job: dict, cv_text: str) -> list:
+    """Requirement keywords of one posting that the CV text lacks, sorted."""
+    cv = cv_text.lower()
+    return sorted({t for t in requirement_tokens(job) if t not in cv})
 
 
 def load_job(snap: Path) -> dict | None:
@@ -70,7 +168,7 @@ def aggregate(jobs: list[dict], cv_text: str | None = None) -> dict:
     """Keyword document-frequency across jobs; bigrams kept when they repeat."""
     uni_df, bi_total = Counter(), Counter()
     for job in jobs:
-        toks = tokens(job_text(job))
+        toks = requirement_tokens(job)
         uni_df.update(set(toks))
         bi_total.update(f"{a} {b}" for a, b in zip(toks, toks[1:]))
     terms = [{"term": t, "jobs": df} for t, df in uni_df.items()]
@@ -107,7 +205,37 @@ def to_markdown(report: dict, sources: list[str]) -> str:
     return "\n".join(out)
 
 
+def job_from_arg(arg: str) -> dict:
+    """A job snapshot dir, or a plain-text JD file (one line per paragraph)."""
+    p = Path(arg)
+    if p.is_dir():
+        job = load_job(p)
+        if job is None:
+            raise OSError(f"no job.json in: {p}")
+        return job
+    return {"description": p.read_text(encoding="utf-8").splitlines()}
+
+
+def main_missing(argv):
+    if len(argv) != 2:
+        print("usage: jd_intel.py --missing <cv-md-file> <jd-file | job-snapshot-dir>",
+              file=sys.stderr)
+        return 2
+    try:
+        cv_text = Path(argv[0]).read_text(encoding="utf-8")
+        job = job_from_arg(argv[1])
+    except OSError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print("Keywords in JD not found in CV text:")
+    for w in missing_from_cv(job, cv_text):
+        print(f"  - {w}")
+    return 0
+
+
 def main(argv):
+    if argv and argv[0] == "--missing":
+        return main_missing(argv[1:])
     as_json = "--json" in argv
     argv = [x for x in argv if x != "--json"]
     cv_text = None

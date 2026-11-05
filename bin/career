@@ -12,12 +12,16 @@
 #   career linkedin diff [snapA snapB]        compare two snapshots (default: 2 latest)
 #   career linkedin audit [snapshot]          rubric-score a snapshot (default: latest)
 #   career linkedin jd <jobs-url|job-id>      snapshot a job post into the store
-#   career linkedin keywords [variant]        JD keyword corpus vs the CV text
+#   career linkedin keywords [variant] [--job <snapshot>]  JD keyword corpus vs the CV text
+#   career jd add <url|file>                  snapshot a public Ashby/Greenhouse/Lever posting (no login)
 #
 # Global flags (anywhere on the line): -c|--client <name>, --json
+# $CAREER_KIT_HOME, when set, is the directory holding clients/ and build/
+# (default: this checkout). Keep the private tree out of the repo with it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DATA="${CAREER_KIT_HOME:-$ROOT}"
 SCRAPER="$ROOT/tools/linkedin-scrape/li_scrape.py"
 DIFFER="$ROOT/tools/linkedin-diff/li_diff.py"
 AUDITOR="$ROOT/tools/linkedin-audit/li_audit.py"
@@ -27,6 +31,7 @@ BENCH="$ROOT/tools/linkedin-benchmark/li_benchmark.py"
 APPLY="$ROOT/tools/career-apply/career_apply.py"
 DOCTOR="$ROOT/tools/career-doctor/career_doctor.py"
 LETTER="$ROOT/tools/career-letter/career_letter.py"
+JDADD="$ROOT/tools/jd-add/jd_add.py"
 VERSION="$ROOT/tools/career-version/career_version.py"
 
 client="" json=0
@@ -39,11 +44,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 set -- "${args[@]+"${args[@]}"}"
-[ -n "$client" ] || client="$(cat "$ROOT/clients/.default" 2>/dev/null || true)"
+[ -n "$client" ] || client="$(cat "$DATA/clients/.default" 2>/dev/null || true)"
 
 lane="${1:-}"; verb="${2:-}"
 
-usage() { usage_fail "usage: career {cv|linkedin|apply} <verb> [args] [-c client] [--json] | career doctor  (see docs/CONTRACT.md)"; }
+usage() { usage_fail "usage: career {cv|linkedin|apply|jd} <verb> [args] [-c client] [--json] | career doctor  (see docs/CONTRACT.md)"; }
 
 # emit <ok> <data-json|null> <error-message|-> ; then exit accordingly.
 emit() {
@@ -96,14 +101,34 @@ emit_tool() {
 [ "$lane" = doctor ] || [ -n "$client" ] || \
   usage_fail "no client: pass -c <name>, or write one into clients/.default"
 
+[ -d "$DATA" ] || usage_fail "CAREER_KIT_HOME is not a directory: $DATA"
+
+# The ATS Markdown of a built variant (empty when it was never built). The
+# `|| true` matters: a failing `ls | head` under pipefail would end the verb
+# silently with ls's exit 2, which is how an unbuilt variant used to look.
+built_md() {
+  local f
+  for f in "$DATA/build/$client/$1"/*_CV.md; do
+    [ -f "$f" ] && { printf '%s' "$f"; return 0; }
+  done
+  return 0
+}
+
+# require_built <variant> ; sets $md. A verb that compares against the CV text
+# must not guess when there is none: say which build is missing.
+require_built() {
+  md="$(built_md "$1")"
+  [ -n "$md" ] || fail "variant not built: $DATA/build/$client/$1 - run: career cv build $1 -c $client"
+}
+
 require_client_dir() {
-  [ -d "$ROOT/clients/$client" ] || usage_fail "unknown client: $client"
+  [ -d "$DATA/clients/$client" ] || usage_fail "unknown client: $client"
 }
 
 # Newest-first snapshot dirs of one kind (a snapshot = a dir with manifest.json;
 # a manifest without "kind" reads as a profile snapshot).
 snapshots() {
-  python3 - "$ROOT/clients/$client/captures" "${1:-profile}" <<'PY'
+  python3 - "$DATA/clients/$client/captures" "${1:-profile}" <<'PY'
 import json, os, sys
 root, kind = sys.argv[1], sys.argv[2]
 if os.path.isdir(root):
@@ -144,7 +169,7 @@ scrape_to_store() {
   local target="$1" kind="$2"
   curl -sf --max-time 3 http://localhost:9777/json/version >/dev/null 2>&1 \
     || fail "no CDP Chrome on :9777 - launch your logged-in Chrome first (see tools/linkedin-scrape/README.md)"
-  snap="$ROOT/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+  snap="$DATA/clients/$client/captures/$(date -u +%Y-%m-%dT%H-%M-%SZ)"
   mkdir -p "$snap"
   if ! uv run "$SCRAPER" "$target" "$snap" >&2; then
     rm -rf "$snap"
@@ -161,30 +186,30 @@ case "$lane" in
       snap="$(snapshots profile | head -1)"
       [ -n "$snap" ] || fail "no profile snapshots for $client - run: career linkedin capture"
       vargs=()
-      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      vfile="$DATA/clients/$client/variants/$variant.yml"
       [ -f "$vfile" ] && vargs=(--variant "$vfile")
       if [ "$json" = 1 ]; then
         # rc 1 means "found problems", not "broke" - carry it out, the way
         # doctor does, instead of reporting success in JSON mode only.
-        if data="$(python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"} --json)"; then rc=0; else rc=$?; fi
+        if data="$(python3 "$LINTER" "$DATA/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"} --json)"; then rc=0; else rc=$?; fi
         [ "$rc" -le 1 ] || fail "lint failed to run"
         emit true "$data" -
         exit "$rc"          # emit does not exit on success; without this the
                             # verb falls through to usage() and prints a SECOND
                             # envelope, breaking json.loads(stdout).
       else
-        exec python3 "$LINTER" "$ROOT/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"}
+        exec python3 "$LINTER" "$DATA/clients/$client/profile.yml" "$snap" ${vargs[0]:+"${vargs[@]}"}
       fi
     fi
     if [ "$verb" = letter ]; then
       snap="${3:-}"
       [ -n "$snap" ] || usage_fail "usage: career cv letter <jd-snapshot> [variant]"
       variant="${4:-baseline}"
-      largs=("$ROOT/clients/$client/profile.yml" "$snap")
-      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      largs=("$DATA/clients/$client/profile.yml" "$snap")
+      vfile="$DATA/clients/$client/variants/$variant.yml"
       [ -f "$vfile" ] && largs+=(--variant "$vfile")
-      md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
-      [ -n "$md" ] && largs+=(--cv "$md")
+      require_built "$variant"
+      largs+=(--cv "$md")
       if [ "$json" = 1 ]; then
         emit_tool python3 "$LETTER" "${largs[@]}"
       else
@@ -197,10 +222,10 @@ case "$lane" in
       # passes through to the tool.
       variant="${3:-}"; snap="${4:-}"
       [ -n "$variant" ] && [ -n "$snap" ] || usage_fail "usage: career cv version <variant> <jd-snapshot> [--id X]"
-      vfile="$ROOT/clients/$client/variants/$variant.yml"
+      vfile="$DATA/clients/$client/variants/$variant.yml"
       [ -f "$vfile" ] || usage_fail "no variant file: $vfile"
       "$ROOT/bin/cv" build "$variant" -c "$client" >/dev/null || fail "cv build $variant failed"
-      vargs=("$ROOT/clients/$client" "$vfile" "$snap" "$ROOT/build/$client/$variant" "${@:5}")
+      vargs=("$DATA/clients/$client" "$vfile" "$snap" "$DATA/build/$client/$variant" "${@:5}")
       if [ "$json" = 1 ]; then
         emit_tool python3 "$VERSION" "${vargs[@]}"
       else
@@ -240,14 +265,14 @@ case "$lane" in
     # verb is run, so it cannot itself require the things it is checking for.
     verb="check"
     if [ "$json" = 1 ]; then
-      dargs=(); [ -n "$client" ] && dargs=(--client "$client")
-      if data="$(python3 "$DOCTOR" "$ROOT" ${dargs[0]:+"${dargs[@]}"} --json)"; then rc=0; else rc=$?; fi
+      dargs=(--data-root "$DATA"); [ -n "$client" ] && dargs+=(--client "$client")
+      if data="$(python3 "$DOCTOR" "$ROOT" "${dargs[@]}" --json)"; then rc=0; else rc=$?; fi
       [ "$rc" -le 1 ] || fail "doctor failed to run"
       emit true "$data" -
       exit "$rc"
     else
-      dargs=(); [ -n "$client" ] && dargs=(--client "$client")
-      exec python3 "$DOCTOR" "$ROOT" ${dargs[0]:+"${dargs[@]}"}
+      dargs=(--data-root "$DATA"); [ -n "$client" ] && dargs+=(--client "$client")
+      exec python3 "$DOCTOR" "$ROOT" "${dargs[@]}"
     fi
     ;;
 
@@ -260,11 +285,29 @@ case "$lane" in
     shift 2 || true
     # The ledger tool takes the client dir, so bin/career stays the only place
     # that knows how a client is resolved.
-    cargs=("$ROOT/clients/$client")
+    cargs=("$DATA/clients/$client")
     if [ "$json" = 1 ]; then
       emit_tool python3 "$APPLY" "$verb" "${cargs[@]}" "$@"
     else
       exec python3 "$APPLY" "$verb" "${cargs[@]}" "$@"
+    fi
+    ;;
+
+  jd)
+    require_client_dir
+    case "$verb" in
+      add) ;;
+      *) usage ;;
+    esac
+    shift 2 || true
+    [ $# -ge 1 ] || usage_fail "usage: career jd add <ashby|greenhouse|lever-url | file> [--company X --title Y --location Z --id ID --source URL]"
+    # The tool takes the client's captures dir, so bin/career stays the only
+    # place that knows how a client is resolved.
+    jargs=("$DATA/clients/$client/captures" "$@")
+    if [ "$json" = 1 ]; then
+      emit_tool python3 "$JDADD" "${jargs[@]}"
+    else
+      exec python3 "$JDADD" "${jargs[@]}"
     fi
     ;;
 
@@ -309,12 +352,29 @@ case "$lane" in
         ;;
 
       keywords)
-        variant="${3:-baseline}"
-        mapfile -t jobsnaps < <(snapshots job)
-        [ "${#jobsnaps[@]}" -ge 1 ] || fail "no job snapshots for $client - run: career linkedin jd <jobs-url>"
-        cvargs=()
-        md="$(ls "$ROOT/build/$client/$variant"/*_CV.md 2>/dev/null | head -1)"
-        [ -n "$md" ] && cvargs=(--cv "$md")
+        # career linkedin keywords [variant] [--job <snapshot>]: with --job the
+        # corpus is that one posting, else every job snapshot of the client.
+        variant="baseline"; onejob=""
+        shift 2
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --job) onejob="${2:?--job needs a job snapshot}"; shift 2 ;;
+            -*) usage_fail "usage: career linkedin keywords [variant] [--job <snapshot>]" ;;
+            *) variant="$1"; shift ;;
+          esac
+        done
+        jobsnaps=()
+        if [ -n "$onejob" ]; then
+          for c in "$onejob" "$DATA/clients/$client/$onejob" "$DATA/clients/$client/captures/$onejob"; do
+            [ -d "$c" ] && { jobsnaps=("$c"); break; }
+          done
+          [ "${#jobsnaps[@]}" -ge 1 ] || usage_fail "no such job snapshot: $onejob"
+        else
+          mapfile -t jobsnaps < <(snapshots job)
+          [ "${#jobsnaps[@]}" -ge 1 ] || fail "no job snapshots for $client - run: career linkedin jd <jobs-url>"
+        fi
+        require_built "$variant"
+        cvargs=(--cv "$md")
         if [ "$json" = 1 ]; then
           emit_tool python3 "$JDINTEL" "${jobsnaps[@]}" ${cvargs[0]:+"${cvargs[@]}"}
         else

@@ -3,8 +3,11 @@
 (The engine sits at the repo root, not under tools/, so it is not part of the
 `discover -s tools/<dir>` sweep - run it by name.)
 """
+import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
@@ -190,6 +193,91 @@ class ExampleProfileIsTheSchemaAnchor(unittest.TestCase):
         # identity, which PRIVATE.md treats as the one unrecoverable mistake.
         self.assertIn("Ada Lovelace", self.raw)
         self.assertIn("example.com", self.raw)
+
+
+# RenderCV's Markdown header template renders email, phone, location, website and
+# social networks only, so a labelled link (custom_connection) never reaches the
+# text an ATS parser reads. See CK-6.
+RENDERED_MD = """# Jane Doe's CV
+
+- Email: [jane@example.com](mailto:jane@example.com)
+- Location: Dublin, Ireland
+- GitHub: [example](https://github.com/example)
+
+
+# Profile
+Text.
+"""
+
+LINKED_DOC = {"cv": {"custom_connections": [
+    {"placeholder": "LinkedIn", "url": "https://linkedin.com/in/example",
+     "fontawesome_icon": "linkedin"}]}}
+
+
+class AtsMarkdownCarriesTheCustomConnections(unittest.TestCase):
+    def test_the_linkedin_link_is_added_to_the_header(self):
+        out = generate.patch_ats_markdown(RENDERED_MD, LINKED_DOC)
+        self.assertIn("- LinkedIn: [LinkedIn](https://linkedin.com/in/example)", out)
+
+    def test_it_lands_inside_the_header_before_the_first_section(self):
+        out = generate.patch_ats_markdown(RENDERED_MD, LINKED_DOC)
+        self.assertLess(out.index("linkedin.com/in/example"), out.index("# Profile"))
+        self.assertGreater(out.index("linkedin.com/in/example"),
+                           out.index("- GitHub:"))
+
+    def test_patching_twice_changes_nothing(self):
+        once = generate.patch_ats_markdown(RENDERED_MD, LINKED_DOC)
+        self.assertEqual(generate.patch_ats_markdown(once, LINKED_DOC), once)
+
+    def test_no_custom_connection_means_no_change(self):
+        self.assertEqual(generate.patch_ats_markdown(RENDERED_MD, {"cv": {}}),
+                         RENDERED_MD)
+
+    def test_an_unknown_icon_is_a_plain_link(self):
+        doc = {"cv": {"custom_connections": [
+            {"placeholder": "Portfolio", "url": "https://example.com/p",
+             "fontawesome_icon": "link"}]}}
+        self.assertIn("- Link: [Portfolio](https://example.com/p)",
+                      generate.patch_ats_markdown(RENDERED_MD, doc))
+
+    def test_a_profile_with_a_labelled_linkedin_contact_yields_the_connection(self):
+        cfg = dict(CFG, contacts=[
+            {"href": "https://linkedin.com/in/example", "label": "LinkedIn"}])
+        doc = generate.to_rendercv(cfg, {})
+        self.assertIn("- LinkedIn: [LinkedIn](https://linkedin.com/in/example)",
+                      generate.ats_connection_lines(doc))
+
+    def test_the_file_form_rewrites_the_markdown_in_place(self):
+        with tempfile.TemporaryDirectory() as d:
+            gen, md = Path(d) / "v.rendercv.yaml", Path(d) / "Jane_Doe_CV.md"
+            gen.write_text(yaml.safe_dump(LINKED_DOC))
+            md.write_text(RENDERED_MD)
+            self.assertTrue(generate.patch_ats_file(gen, md))
+            self.assertIn("linkedin.com/in/example", md.read_text())
+            self.assertFalse(generate.patch_ats_file(gen, md))
+
+
+class DataRoot(unittest.TestCase):
+    """$CAREER_KIT_HOME moves clients/ and build/ out of the checkout. CK-2."""
+
+    def test_unset_means_the_checkout(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CAREER_KIT_HOME", None)
+            self.assertEqual(generate.data_root(), generate.ROOT)
+
+    def test_set_means_that_directory(self):
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.dict(os.environ, {"CAREER_KIT_HOME": d}):
+            self.assertEqual(generate.data_root(), Path(d).resolve())
+
+    def test_a_missing_directory_is_refused_not_created(self):
+        with tempfile.TemporaryDirectory() as d:
+            gone = str(Path(d) / "nope")
+            with mock.patch.dict(os.environ, {"CAREER_KIT_HOME": gone}):
+                with self.assertRaises(SystemExit) as ctx:
+                    generate.data_root()
+            self.assertIn("CAREER_KIT_HOME", str(ctx.exception))
+            self.assertFalse(Path(gone).exists())
 
 
 if __name__ == "__main__":

@@ -60,7 +60,8 @@ bin/career cv lint  openai                   # cross-check the CV against the Li
 
 bin/career linkedin capture <profile-url>    # snapshot a profile into the capture store
 bin/career linkedin jd <jobs-url>            # snapshot a job post
-bin/career linkedin keywords openai          # JD keyword corpus, marked against the CV
+bin/career jd add <ashby|greenhouse|lever-url | file>   # snapshot a public posting: no login, no browser
+bin/career linkedin keywords openai          # JD keyword corpus, marked against the CV (--job <snapshot>: one posting)
 bin/career linkedin diff                     # compare the two latest snapshots
 bin/career linkedin audit                    # rubric-score the latest profile snapshot
 
@@ -75,6 +76,14 @@ Every verb takes `-c <client>` and `--json`. With `--json` it prints exactly one
 envelope object; exit 2 is a usage error, 1 is an operational failure. There is
 no default client fallback — with no `-c` and no `clients/.default`, commands
 refuse rather than guess which person they are building a CV for.
+
+To keep the private tree outside the checkout, point `CAREER_KIT_HOME` at a
+directory that holds `clients/` and `build/`; every verb (and `bin/cv`,
+`generate.py`) then reads and writes there and nowhere in the repo:
+
+```bash
+export CAREER_KIT_HOME=~/career-data      # ~/career-data/clients/<name>/profile.yml ...
+```
 
 Requires [`uv`](https://docs.astral.sh/uv/). RenderCV runs via
 `uvx --from "rendercv[full]" rendercv` — no global install; it self-fetches on

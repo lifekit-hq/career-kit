@@ -23,6 +23,9 @@ PROFILE = {
                     "start": "Jan. 2024", "end": "Present", "location": "Dublin",
                     "bullets": ["Owned Instagram content end to end."]}],
     "skills": [{"group": "Tools", "items": "Canva"}],
+    "projects": [{"name": "sample-tracker", "tech": "Python, SQLite",
+                  "url": "https://example.com/sample-tracker",
+                  "bullets": ["Built a content calendar that flags gaps."]}],
 }
 
 
@@ -81,6 +84,27 @@ class Grounding(Base):
                                  {"acme": {"bullets": ["Ran paid Marketo campaigns."]}}}))
         unev = self.build(variant_path=v)["signals"]["unevidenced"]
         self.assertNotIn("marketo", unev)      # now evidenced, so claimable
+
+
+class Facts(Base):
+    """CK-5: the strongest evidence is often a project, not a job."""
+
+    def test_project_bullets_are_citable_facts(self):
+        text = cl.render(self.build())
+        facts = text.split("FACTS YOU MAY CITE")[1].split("UNBACKED JD LANGUAGE")[0]
+        self.assertIn("Project: sample-tracker (Python, SQLite)", facts)
+        self.assertIn("Built a content calendar that flags gaps.", facts)
+        self.assertIn("Owned Instagram content end to end.", facts)    # roles still there
+
+    def test_the_json_pack_carries_the_project_tech(self):
+        proj = self.build()["evidence"]["projects"][0]
+        self.assertEqual((proj["name"], proj["tech"]), ("sample-tracker", "Python, SQLite"))
+
+    def test_a_profile_without_projects_renders_as_before(self):
+        p = json.loads(self.profile.read_text())
+        del p["projects"]
+        self.profile.write_text(json.dumps(p))
+        self.assertNotIn("Project:", cl.render(self.build()))
 
 
 class Hygiene(Base):

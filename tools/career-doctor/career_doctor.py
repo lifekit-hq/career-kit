@@ -1,6 +1,6 @@
 """career doctor - say what a verb needs before it fails cryptically.
 
-    python3 career_doctor.py <repo-root> [--client NAME] [--json]
+    python3 career_doctor.py <repo-root> [--client NAME] [--data-root DIR] [--json]
 
 `career linkedin capture` dies with "no CDP Chrome on :9777" only once it is
 already halfway through the work, and a missing uv surfaces as a RenderCV
@@ -57,6 +57,8 @@ def check_cdp(host=CDP_HOST, port=CDP_PORT, connect=None):
 
 
 def check_client(root: Path, client=None):
+    """`root` is the directory that holds clients/ (the checkout, or the
+    $CAREER_KIT_HOME the CLI was pointed at)."""
     default = root / "clients" / ".default"
     if client is None:
         if not default.exists():
@@ -82,12 +84,12 @@ def check_design(root: Path):
               "the shared RenderCV design block - every variant renders through it")
 
 
-def run_checks(root: Path, client=None, **probes):
+def run_checks(root: Path, client=None, data_root=None, **probes):
     return [
         check_python(probes.get("version")),
         check_uv(probes.get("which", shutil.which)),
         check_cdp(connect=probes.get("connect")),
-        check_client(root, client),
+        check_client(data_root or root, client),
         check_design(root),
     ]
 
@@ -112,10 +114,14 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("root")
     ap.add_argument("--client")
+    ap.add_argument("--data-root", help="directory holding clients/ (default: the "
+                    "repo root; bin/career passes $CAREER_KIT_HOME)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
 
-    report = summarize(run_checks(Path(args.root), args.client))
+    report = summarize(run_checks(
+        Path(args.root), args.client,
+        Path(args.data_root) if args.data_root else None))
     print(json.dumps(report) if args.json else render(report))
     return 0 if report["ok"] else 1
 

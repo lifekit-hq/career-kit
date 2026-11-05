@@ -76,7 +76,8 @@ def evidence(cfg: dict) -> dict:
                   for r in cfg.get("experience", [])],
         "skills": [{"group": g["group"], "items": g["items"]}
                    for g in cfg.get("skills", [])],
-        "projects": [{"name": p["name"], "bullets": p.get("bullets", [])}
+        "projects": [{"name": p["name"], "tech": p.get("tech", ""),
+                      "bullets": p.get("bullets", [])}
                      for p in cfg.get("projects", [])],
         "summary": cfg.get("summary", ""),
     }
@@ -180,6 +181,11 @@ def render(pack: dict) -> str:
     for r in pack["evidence"]["roles"]:
         out.append(f'  {r["title"]}, {r["company"]} ({r["dates"]})')
         out += [f"    - {b}" for b in r["bullets"]]
+    # Projects are CV content like any role: often the strongest evidence for a
+    # role the day job never touched, so they are citable facts too.
+    for pr in pack["evidence"]["projects"]:
+        out.append(f'  Project: {pr["name"]}' + (f' ({pr["tech"]})' if pr["tech"] else ""))
+        out += [f"    - {b}" for b in pr["bullets"]]
     shown = s["unevidenced"][:40]
     more = len(s["unevidenced"]) - len(shown)
     out += ["", f'UNBACKED JD LANGUAGE ({len(s["unevidenced"])} term(s); raw signal - '

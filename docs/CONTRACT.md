@@ -19,6 +19,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   | `cv` | `build`, `ats`, `match`, `lint`, `letter`, `version` | - |
   | `linkedin` | `capture`, `diff`, `audit`, `jd`, `keywords`, `benchmark` | - |
   | `apply` | `add`, `list`, `set`, `followup` | - |
+  | `jd` | `add` | - |
   | `portfolio` | - | (lane reserved) |
   | `strategy` | - | (lane reserved) |
 
@@ -32,6 +33,18 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   grows modes; a new behavior is a new verb.
 - **client** - resolved from `-c`, else `clients/.default`. Every command
   operates on exactly one client.
+- **data root** - `clients/` and `build/` live under `$CAREER_KIT_HOME` when it
+  is set (it must be an existing directory: a bad value is a usage error, never
+  created), else under the checkout. Setting it is how the private tree stays
+  out of the repo with no symlinks.
+- **jd add** - `jd add <url|file>` writes the same `kind: job` snapshot as
+  `linkedin jd`, from a public Ashby, Greenhouse or Lever posting URL (their
+  public JSON APIs, no login, no browser) or from a local text/HTML file given
+  `--company` and `--title`. Read-only. The vacancy id is `ashby-<id8>`,
+  `lever-<id8>`, or Greenhouse's numeric id; a file has none unless `--id`.
+- **built CV** - a verb that compares against the CV text (`cv letter`,
+  `cv ats`, `cv match`, `linkedin keywords`) needs the variant built first and
+  exits 1 naming the missing `build/<client>/<variant>` when it is not.
 - **version** - `cv version <variant> <jd-snapshot>` builds the variant and
   freezes the cut as `clients/<c>/applications/<company>/<vacancy-id>-<title>/v<N>/`
   (the variant, the merged RenderCV input, the PDF, the ATS text, and a

@@ -2,10 +2,12 @@
 # The tool (code) is public-able; the data is not. See PRIVATE.md.
 # The whole clients/ tree is private: profiles, variants, scraped captures, and
 # even a client's *name* (a directory) must not hit git.
-/clients/
+# No trailing slash: a symlink to an external data root ($CAREER_KIT_HOME is the
+# cleaner way) is not a directory to git, and `/clients/` would not match it.
+/clients
 
 # Build artifacts (rendered CVs carry the same content as the data)
-/build/
+/build
 
 # Python / uv
 __pycache__/

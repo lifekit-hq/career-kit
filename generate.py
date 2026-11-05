@@ -22,6 +22,7 @@ Design contract (per client, under clients/<client>/):
 """
 import argparse
 import copy
+import os
 import unicodedata
 from pathlib import Path
 
@@ -29,8 +30,27 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"                 # shared assets (design.yaml)
-CLIENTS = ROOT / "clients"           # per-client data: <client>/profile.yml, variants/
-BUILD = ROOT / "build"
+
+
+def data_root() -> Path:
+    """Where the private tree lives: $CAREER_KIT_HOME, else the checkout itself.
+
+    clients/ and build/ resolve under it. Pointing it outside the checkout keeps
+    every private byte out of the repo's reach, with no symlinks to forget (and
+    a symlink is not matched by a directory-only ignore rule). bin/career and
+    bin/cv resolve it the same way.
+    """
+    home = os.environ.get("CAREER_KIT_HOME", "")
+    if not home:
+        return ROOT
+    path = Path(home).expanduser()
+    if not path.is_dir():
+        raise SystemExit(f"CAREER_KIT_HOME is not a directory: {home}")
+    return path.resolve()
+
+
+CLIENTS = data_root() / "clients"    # per-client data: <client>/profile.yml, variants/
+BUILD = data_root() / "build"
 
 
 def default_client() -> str:
@@ -301,6 +321,56 @@ def _check_highlights(sections: dict) -> None:
         "and the ATS Markdown.\nUse a comma, a semicolon, or a rewrite:\n" + listing)
 
 
+# RenderCV's Markdown header template renders phone, email, location, website and
+# social_networks, and nothing else: a custom_connection (our labelled link, e.g.
+# a short "LinkedIn" over a long profile URL) reaches the PDF but never the .md,
+# which is the text an ATS parser reads. So after the render, the connections the
+# template dropped are appended to the Markdown header.
+_ICON_NETWORK = {"linkedin": "LinkedIn", "github": "GitHub"}
+
+
+def ats_connection_lines(doc: dict) -> list:
+    """Markdown bullets for the custom connections of a generated RenderCV doc,
+    in the shape the template uses for social networks."""
+    lines = []
+    for c in (doc.get("cv") or {}).get("custom_connections") or []:
+        network = _ICON_NETWORK.get(c.get("fontawesome_icon"), "Link")
+        lines.append(f"- {network}: [{c['placeholder']}]({c['url']})")
+    return lines
+
+
+def patch_ats_markdown(md: str, doc: dict) -> str:
+    """Append the custom connections the template dropped to the header block.
+
+    The header is the run of `- ` bullets under the `# <name>'s CV` title, ending
+    at the next heading. Idempotent: a bullet already present is not repeated.
+    """
+    lines = md.split("\n")
+    start = next((i for i, l in enumerate(lines) if l.startswith("# ")), None)
+    if start is None:
+        return md
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("#")),
+               len(lines))
+    last = max((i for i in range(start + 1, end) if lines[i].startswith("- ")),
+               default=start)
+    have = set(lines[start:end])
+    add = [l for l in ats_connection_lines(doc) if l not in have]
+    if not add:
+        return md
+    lines[last + 1:last + 1] = add
+    return "\n".join(lines)
+
+
+def patch_ats_file(rendercv_yaml: Path, md_path: Path) -> bool:
+    """Patch the rendered Markdown in place; True when it changed."""
+    doc = yaml.safe_load(rendercv_yaml.read_text(encoding="utf-8"))
+    before = md_path.read_text(encoding="utf-8")
+    after = patch_ats_markdown(before, doc)
+    if after != before:
+        md_path.write_text(after, encoding="utf-8")
+    return after != before
+
+
 def to_rendercv(cfg: dict, design: dict) -> dict:
     cv = {"name": cfg["name"], "headline": cfg["headline"]}
     if cfg.get("location"):
@@ -327,12 +397,26 @@ def main():
     ap.add_argument("-c", "--client", default=None,
                     help="client under clients/ (default: clients/.default)")
     ap.add_argument("-o", "--out")
+    ap.add_argument("--patch-ats", action="store_true",
+                    help="after RenderCV has rendered: append the custom "
+                         "connections (e.g. LinkedIn) its Markdown template "
+                         "drops to build/<client>/<variant>/*_CV.md")
     args = ap.parse_args()
 
     client = args.client or default_client()
     cdir = CLIENTS / client
     if not cdir.is_dir():
         raise SystemExit(f"no such client: {client} (looked in {cdir})")
+
+    if args.patch_ats:
+        gen = BUILD / client / f"{args.variant}.rendercv.yaml"
+        mds = sorted((BUILD / client / args.variant).glob("*_CV.md"))
+        if not gen.is_file() or not mds:
+            raise SystemExit(f"nothing to patch: build {args.variant} first "
+                             f"({BUILD / client / args.variant})")
+        patch_ats_file(gen, mds[0])
+        print(mds[0])
+        return
 
     ppath = cdir / "profile.yml"
     if not ppath.exists():

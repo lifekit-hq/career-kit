@@ -80,6 +80,32 @@ class ClientResolution(unittest.TestCase):
         self.assertEqual(doc.check_client(self.root, None)["status"], doc.OK)
 
 
+class _Closed:
+    def close(self):
+        pass
+
+
+class DataRoot(unittest.TestCase):
+    """The client lives under $CAREER_KIT_HOME, the design under the checkout."""
+
+    def test_the_client_is_looked_up_under_the_data_root_not_the_checkout(self):
+        with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as data:
+            scaffold(Path(repo), profile=False)               # design only
+            scaffold(Path(data), design=False)                # client only
+            by_name = {c["check"]: c for c in
+                       doc.run_checks(Path(repo), "acme", data_root=Path(data),
+                                      connect=_Closed)}
+            self.assertEqual(by_name["client"]["status"], doc.OK)
+            self.assertEqual(by_name["design"]["status"], doc.OK)
+
+    def test_without_a_data_root_the_checkout_is_used(self):
+        with tempfile.TemporaryDirectory() as repo:
+            scaffold(Path(repo))
+            by_name = {c["check"]: c for c in
+                       doc.run_checks(Path(repo), "acme", connect=_Closed)}
+            self.assertEqual(by_name["client"]["status"], doc.OK)
+
+
 class Report(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

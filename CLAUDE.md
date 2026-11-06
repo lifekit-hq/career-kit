@@ -35,7 +35,7 @@ bin/career apply add <jd-snapshot> [--variant v] [--version vN] [--id X] [--reap
                                           # row id = the posting's vacancy id (jobId); --id when the capture has none;
                                           # the same posting twice is refused unless --reapply (id gets a -2 suffix)
 bin/career apply list [--status s] [-c client]  # the ledger (+ derived days-quiet / chase count)
-bin/career apply set <vacancy-id> --status sent|replied|interview|rejected|ghosted [--followup DATE]
+bin/career apply set <vacancy-id> --status drafted|sent|replied|interview|rejected|ghosted|withdrawn [--followup DATE]
 bin/career apply set <vacancy-id> --chased [DATE]  # record a chase (notes marker); restarts the follow-up clock
 bin/career apply followup [--on DATE] [-c client]  # what is due to chase, most overdue first
 

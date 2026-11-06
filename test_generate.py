@@ -280,5 +280,93 @@ class DataRoot(unittest.TestCase):
             self.assertFalse(Path(gone).exists())
 
 
+def forbid(*phrases):
+    return [{"phrase": p, "key": generate._phrase_key(p), "reason": ""} for p in phrases]
+
+
+class ForbiddenClaims(unittest.TestCase):
+    """CK-12: a claim the client cannot back is written down once, and every
+    later build is checked against it."""
+
+    def build(self, forbidden, *bullets):
+        return generate.to_rendercv(cfg_with_bullets(*bullets), {}, forbidden)
+
+    def test_a_forbidden_phrase_fails_the_build_and_names_phrase_and_text(self):
+        with self.assertRaises(SystemExit) as ctx:
+            self.build(forbid("least-privilege"), "Designed least-privilege access.")
+        msg = str(ctx.exception)
+        self.assertIn("'least-privilege'", msg)
+        self.assertIn("Designed least-privilege access.", msg)
+
+    def test_the_match_is_on_the_words_not_the_spelling(self):
+        for text in ("Enforced LEAST PRIVILEGE on every role.",
+                     "Enforced least  privilege   on every role.",
+                     "Enforced least-privileged roles."):
+            with self.subTest(text=text), self.assertRaises(SystemExit):
+                self.build(forbid("least-privilege"), text)
+
+    def test_a_clean_cv_builds(self):
+        out = self.build(forbid("every operation is audited", "least-privilege"),
+                         "Built an audit log for admin actions.")
+        self.assertEqual(out["cv"]["sections"]["Experience"][0]["highlights"],
+                         ["Built an audit log for admin actions."])
+
+    def test_every_hit_is_listed_with_its_reason(self):
+        forbidden = [{"phrase": "every operation is audited", "reason": "a log, not a guarantee",
+                      "key": generate._phrase_key("every operation is audited")}]
+        with self.assertRaises(SystemExit) as ctx:
+            self.build(forbidden + forbid("least-privilege"),
+                       "Every operation is audited.", "Used least-privilege roles.")
+        msg = str(ctx.exception)
+        self.assertIn("2 forbidden claim(s)", msg)
+        self.assertIn("a log, not a guarantee", msg)
+
+    def test_the_headline_summary_and_skills_are_checked_not_only_bullets(self):
+        for field, value in (("headline", "Least-Privilege Specialist"),
+                             ("summary", "Known for least privilege design.")):
+            with self.subTest(field=field), self.assertRaises(SystemExit):
+                generate.to_rendercv(dict(CFG, **{field: value}), {}, forbid("least privilege"))
+
+    def test_a_hidden_character_inside_the_phrase_does_not_dodge_the_check(self):
+        with self.assertRaises(SystemExit):
+            self.build(forbid("least privilege"), "Used least\u200b privilege roles.")
+
+    def test_no_list_means_no_check(self):
+        generate.to_rendercv(cfg_with_bullets("Used least-privilege roles."), {})
+
+
+class LoadForbidden(unittest.TestCase):
+    def load(self, text=None):
+        with tempfile.TemporaryDirectory() as d:
+            if text is not None:
+                (Path(d) / generate.FORBIDDEN_FILE).write_text(text)
+            return generate.load_forbidden(Path(d))
+
+    def test_no_file_is_no_list(self):
+        self.assertEqual(self.load(), [])
+
+    def test_a_bare_list_of_phrases_and_reasoned_entries(self):
+        got = self.load("- least-privilege\n- phrase: every operation is audited\n"
+                        "  reason: it is a log\n")
+        self.assertEqual([(c["phrase"], c["reason"]) for c in got],
+                         [("least-privilege", ""), ("every operation is audited", "it is a log")])
+
+    def test_a_forbidden_key_holding_the_list(self):
+        self.assertEqual(len(self.load("forbidden:\n  - a claim\n")), 1)
+
+    def test_an_empty_file_or_list_is_no_list(self):
+        self.assertEqual(self.load(""), [])
+        self.assertEqual(self.load("forbidden:\n"), [])
+
+    def test_an_entry_that_would_match_everything_is_refused(self):
+        for text in ("- ''\n", "- '--'\n", "- {reason: x}\n", "- 5\n"):
+            with self.subTest(text=text), self.assertRaises(SystemExit):
+                self.load(text)
+
+    def test_a_non_list_is_refused(self):
+        with self.assertRaises(SystemExit):
+            self.load("forbidden: nope\n")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,10 +19,13 @@ Design contract (per client, under clients/<client>/):
   variants/*.yml = the framing (per role): selection, order, and prose.
   design.yaml    = RenderCV design block (the look). Shared from data/design.yaml,
                    overridable per client at clients/<client>/design.yaml.
+  forbidden_claims.yml = optional: phrases this client must never claim; a build
+                   whose CV contains one fails naming it (see load_forbidden).
 """
 import argparse
 import copy
 import os
+import re
 import unicodedata
 from pathlib import Path
 
@@ -66,6 +69,76 @@ def default_client() -> str:
         raise SystemExit(
             "no client: pass -c <name>, or write one into clients/.default")
     return name
+
+
+FORBIDDEN_FILE = "forbidden_claims.yml"
+
+
+def _phrase_key(text) -> str:
+    """Case, punctuation and runs of spaces carry no claim: "Least-privilege"
+    and "least privilege" are the same words."""
+    return " ".join(re.sub(r"[^a-z0-9+#]+", " ", str(text).lower()).split())
+
+
+def load_forbidden(cdir: Path) -> list:
+    """The client's list of claims the CV must never make, from
+    clients/<client>/forbidden_claims.yml (absent = no list). Either a bare YAML
+    list or a `forbidden:` list; each entry a phrase, or {phrase, reason}.
+
+    Truth review is a process unless something stops a build: the facts a client
+    cannot back (a capability the job never had, a scope inflated in a past cut)
+    are written down once and every later cut is checked against them."""
+    path = cdir / FORBIDDEN_FILE
+    if not path.is_file():
+        return []
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    entries = doc.get("forbidden") if isinstance(doc, dict) else doc
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise SystemExit(f"{path}: expected a list of phrases (or `forbidden:` "
+                         "holding one)")
+    out = []
+    for e in entries:
+        phrase, reason = ((e.get("phrase"), e.get("reason")) if isinstance(e, dict)
+                          else (e, None))
+        if not isinstance(phrase, str) or not _phrase_key(phrase):
+            raise SystemExit(f"{path}: every entry needs a non-empty `phrase`, "
+                             f"got {e!r}")
+        out.append({"phrase": phrase.strip(), "key": _phrase_key(phrase),
+                    "reason": str(reason).strip() if reason else ""})
+    return out
+
+
+def _strings(node, path="cv"):
+    """Yield (path, text) for every string value under node."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _strings(v, f"{path}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _strings(v, f"{path}[{i}]")
+    elif isinstance(node, str):
+        yield path, node
+
+
+def _check_forbidden(cv: dict, forbidden: list) -> None:
+    """Fail the build when any rendered text contains a forbidden phrase. The
+    match is on the words, not the spelling, and deliberately inside longer
+    words too ("audit" would catch "audited"): a gate that misses a variant of
+    the claim is worse than one that over-asks, and the message names exactly
+    what it hit."""
+    hits = [(c, path, text) for path, text in _strings(cv)
+            for c in forbidden if c["key"] in _phrase_key(text)]
+    if not hits:
+        return
+    listing = "\n".join(
+        f"  {c['phrase']!r}" + (f" ({c['reason']})" if c["reason"] else "")
+        + f"\n      [{path}] {text}" for c, path, text in hits)
+    raise SystemExit(
+        f"{len(hits)} forbidden claim(s) in the CV, listed in {FORBIDDEN_FILE}. "
+        "Rewrite the text to what the facts support (or, if the list is wrong, "
+        "fix the list):\n" + listing)
 
 
 # Keys a variant may replace wholesale. Named here rather than inline so the
@@ -371,7 +444,7 @@ def patch_ats_file(rendercv_yaml: Path, md_path: Path) -> bool:
     return after != before
 
 
-def to_rendercv(cfg: dict, design: dict) -> dict:
+def to_rendercv(cfg: dict, design: dict, forbidden: list = ()) -> dict:
     cv = {"name": cfg["name"], "headline": cfg["headline"]}
     if cfg.get("location"):
         cv["location"] = cfg["location"]
@@ -388,6 +461,7 @@ def to_rendercv(cfg: dict, design: dict) -> dict:
     cv = _fold_unicode(cv)
     _check_confusables(cv)
     _check_highlights(cv["sections"])
+    _check_forbidden(cv, forbidden)
     return {"cv": cv, "design": design, "locale": {"language": "english"}}
 
 
@@ -432,7 +506,7 @@ def main():
     dpath = cdir / "design.yaml"
     design = yaml.safe_load((dpath if dpath.exists() else DATA / "design.yaml").read_text())
 
-    doc = to_rendercv(merge(profile, variant), design)
+    doc = to_rendercv(merge(profile, variant), design, load_forbidden(cdir))
 
     outdir = BUILD / client
     outdir.mkdir(parents=True, exist_ok=True)

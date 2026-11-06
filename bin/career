@@ -5,6 +5,8 @@
 #   career cv build|ats|match [...]           CV lane (delegates to bin/cv)
 #   career cv letter <jd-snapshot> [variant]  grounded input pack for a cover letter
 #   career cv version <variant> <jd-snapshot> [--id X]  build + freeze an immutable v<N> of an application
+#   career cv verdict v<N> <rejected|submittable|confirm> [--jd S|--app P] [--note T]  record the review verdict in VERSIONS.md and REVIEW.md
+#   career cv prep <jd-snapshot> [variant] [--version vN]  interview-prep pack: stories, gaps, questions
 #   career apply add|list|set [...]           application ledger
 #   career doctor                             preflight: what is missing before a verb needs it
 #   career cv lint [variant]                  cross-check CV vs latest LinkedIn snapshot
@@ -33,6 +35,8 @@ DOCTOR="$ROOT/tools/career-doctor/career_doctor.py"
 LETTER="$ROOT/tools/career-letter/career_letter.py"
 JDADD="$ROOT/tools/jd-add/jd_add.py"
 VERSION="$ROOT/tools/career-version/career_version.py"
+VERDICT="$ROOT/tools/career-verdict/career_verdict.py"
+PREP="$ROOT/tools/career-prep/career_prep.py"
 
 client="" json=0
 args=()
@@ -187,7 +191,13 @@ case "$lane" in
       [ -n "$snap" ] || fail "no profile snapshots for $client - run: career linkedin capture"
       vargs=()
       vfile="$DATA/clients/$client/variants/$variant.yml"
-      [ -f "$vfile" ] && vargs=(--variant "$vfile")
+      if [ -f "$vfile" ]; then
+        vargs=(--variant "$vfile")
+      elif [ "$variant" != baseline ]; then
+        # baseline is the profile itself; any other name with no file would
+        # quietly lint the profile and call it that variant.
+        usage_fail "no variant file: $vfile"
+      fi
       if [ "$json" = 1 ]; then
         # rc 1 means "found problems", not "broke" - carry it out, the way
         # doctor does, instead of reporting success in JSON mode only.
@@ -214,6 +224,33 @@ case "$lane" in
         emit_tool python3 "$LETTER" "${largs[@]}"
       else
         exec python3 "$LETTER" "${largs[@]}"
+      fi
+    fi
+    if [ "$verb" = prep ]; then
+      snap="${3:-}"
+      [ -n "$snap" ] || usage_fail "usage: career cv prep <jd-snapshot> [variant] [--version vN] [--id X]"
+      variant="baseline"
+      if [ $# -ge 4 ] && [ "${4#-}" = "$4" ]; then variant="$4"; shift; fi
+      pargs=("$DATA/clients/$client/profile.yml" "$snap")
+      vfile="$DATA/clients/$client/variants/$variant.yml"
+      [ -f "$vfile" ] && pargs+=(--variant "$vfile")
+      require_built "$variant"
+      pargs+=(--cv "$md" "${@:4}")
+      if [ "$json" = 1 ]; then
+        emit_tool python3 "$PREP" "${pargs[@]}"
+      else
+        exec python3 "$PREP" "${pargs[@]}"
+      fi
+    fi
+    if [ "$verb" = verdict ]; then
+      [ $# -ge 4 ] || usage_fail "usage: career cv verdict v<N> <rejected|submittable|confirm> [--jd <snapshot> | --app <company/vacancy-dir>] [--note TEXT]"
+      # Everything after the two positionals (--jd, --app, --id, --note)
+      # passes through to the tool.
+      dargs=("$DATA/clients/$client" "$3" "$4" "${@:5}")
+      if [ "$json" = 1 ]; then
+        emit_tool python3 "$VERDICT" "${dargs[@]}"
+      else
+        exec python3 "$VERDICT" "${dargs[@]}"
       fi
     fi
     if [ "$verb" = version ]; then

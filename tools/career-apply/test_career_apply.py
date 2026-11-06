@@ -1,5 +1,8 @@
 """Unit tests for career_apply. Run: python3 -m unittest discover -s tools/career-apply"""
+import contextlib
+import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -311,6 +314,123 @@ class Reopening(Base):
         self.add("--applied", "2026-08-10")
         _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "replied")
         self.assertEqual(d["updated"]["followup"], "2026-08-17")
+
+
+class Drafted(Base):
+    """CK-7: a row can be prepared-not-sent, and then it is not chased."""
+
+    def test_a_draft_has_no_applied_or_followup_date(self):
+        _, d = self.add("--status", "drafted")
+        e = d["added"]
+        self.assertEqual((e["status"], e["applied"], e["followup"]),
+                         ("drafted", None, None))
+
+    def test_a_draft_is_listed_and_filterable_but_never_due(self):
+        self.add("--status", "drafted")
+        _, d = self.run_cli("list", str(self.client))
+        self.assertEqual(d["applications"][0]["status"], "drafted")
+        self.assertIsNone(d["applications"][0]["days_quiet"])
+        _, d = self.run_cli("list", str(self.client), "--status", "drafted")
+        self.assertEqual(d["count"], 1)
+        _, d = self.run_cli("followup", str(self.client), "--on", "2999-01-01")
+        self.assertEqual(d["count"], 0)
+
+    def test_the_text_list_survives_a_row_with_no_applied_date(self):
+        self.add("--status", "drafted")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(career_apply.main(["list", str(self.client)], today=TODAY), 0)
+        self.assertIn("drafted", out.getvalue())
+
+    def test_a_date_on_a_draft_is_a_usage_error(self):
+        for flag in ("--applied", "--followup"):
+            code, _ = self.add("--status", "drafted", flag, "2026-08-20")
+            self.assertEqual(code, 2, flag)
+
+    def test_add_only_starts_a_row_as_drafted_or_sent(self):
+        code, _ = self.add("--status", "rejected")
+        self.assertEqual(code, 2)
+
+    def test_sending_a_draft_dates_it_today_and_starts_the_clock(self):
+        self.add("--status", "drafted")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "sent")
+        self.assertEqual((d["updated"]["applied"], d["updated"]["followup"]),
+                         (TODAY, "2026-08-28"))
+
+    def test_a_sent_row_keeps_its_original_applied_date(self):
+        self.add("--applied", "2026-08-10")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "replied")
+        self.assertEqual(d["updated"]["applied"], "2026-08-10")
+
+    def test_nothing_to_chase_on_a_draft(self):
+        self.add("--status", "drafted")
+        code, _ = self.run_cli("set", str(self.client), "4437630034", "--chased")
+        self.assertEqual(code, 2)
+
+
+class Withdrawn(Base):
+    def test_withdrawn_is_a_terminal_status_with_nothing_to_chase(self):
+        self.add("--applied", "2026-08-10")
+        _, d = self.run_cli("set", str(self.client), "4437630034", "--status", "withdrawn")
+        self.assertEqual((d["updated"]["status"], d["updated"]["followup"]),
+                         ("withdrawn", None))
+        _, d = self.run_cli("followup", str(self.client), "--on", "2999-01-01")
+        self.assertEqual(d["count"], 0)
+        _, d = self.run_cli("list", str(self.client), "--status", "withdrawn")
+        self.assertEqual((d["count"], d["applications"][0]["days_quiet"]), (1, None))
+        code, _ = self.run_cli("set", str(self.client), "4437630034", "--chased")
+        self.assertEqual(code, 2)
+
+
+class SameRoleUnderAnotherId(Base):
+    """CK-8: company plus normalised title, whatever the vacancy id."""
+
+    def other_posting(self, **over):
+        """The same role on another board: a different capture and vacancy id."""
+        snap = self.client / "captures" / "2026-08-20T09-00-00Z"
+        snap.mkdir(parents=True)
+        (snap / "job.json").write_text(json.dumps({**JOB, "jobId": "board-77", **over}))
+        return snap
+
+    def test_a_second_id_for_the_same_role_warns_and_names_the_first(self):
+        self.add()
+        snap = self.other_posting(company="PARDGROUP Ltd.",
+                                  title="Social Media Manager (Dublin)")
+        code, d = self.run_cli("add", str(self.client), str(snap))
+        self.assertEqual(code, 0)                         # a warning, never a refusal
+        self.assertEqual(len(d["warnings"]), 1)
+        self.assertIn("4437630034", d["warnings"][0])
+        self.assertEqual(d["count"], 2)
+
+    def test_the_text_output_carries_the_warning(self):
+        self.add()
+        snap = self.other_posting()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            career_apply.main(["add", str(self.client), str(snap)], today=TODAY)
+        self.assertIn("warning:", out.getvalue())
+        self.assertIn("4437630034", out.getvalue())
+
+    def test_a_different_role_or_company_does_not_warn(self):
+        self.add()
+        for over in ({"title": "Community Manager"}, {"company": "Other Co"}):
+            with self.subTest(over=over):
+                snap = self.other_posting(**over)
+                _, d = self.run_cli("add", str(self.client), str(snap))
+                self.assertEqual(d["warnings"], [])
+                self.run_cli("set", str(self.client), "board-77", "--status", "withdrawn")
+                shutil.rmtree(snap)
+                doc = career_apply.load(self.client)
+                doc["applications"] = [a for a in doc["applications"] if a["id"] != "board-77"]
+                career_apply.save(self.client, doc)
+
+    def test_a_deliberate_reapply_to_the_same_posting_does_not_warn(self):
+        self.add()
+        _, d = self.add("--reapply")
+        self.assertEqual(d["warnings"], [])
+
+    def test_a_first_row_has_no_warnings(self):
+        self.assertEqual(self.add()[1]["warnings"], [])
 
 
 if __name__ == "__main__":

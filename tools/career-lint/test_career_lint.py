@@ -1,7 +1,10 @@
 """Unit tests for career_lint. Run:  python3 -m unittest discover -s tools/career-lint"""
+import contextlib
+import io
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import career_lint
@@ -145,6 +148,68 @@ class CareerLintTest(unittest.TestCase):
         self.assertEqual(career_lint.degree_class("Bachelor's Degree"), "bachelor")
         self.assertEqual(career_lint.degree_class("MSc"), "master")
         self.assertIsNone(career_lint.degree_class("Diploma"))
+
+
+class SnapshotAge(unittest.TestCase):
+    """CK-10: the comparison is only as good as the capture."""
+    TODAY = date(2026, 11, 6)
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def snap(self, name="2026-08-19T14-50-08Z", manifest=None):
+        d = self.root / name
+        d.mkdir()
+        if manifest is not None:
+            (d / "manifest.json").write_text(json.dumps(manifest))
+        return d
+
+    def test_an_old_snapshot_warns_with_its_age_and_the_fix(self):
+        f, age = career_lint.age_finding(self.snap(), self.TODAY)
+        self.assertEqual((f["status"], age), ("warn", 79))
+        self.assertIn("79 days old", f["detail"])
+        self.assertIn("career linkedin capture", f["detail"])
+
+    def test_a_recent_snapshot_passes(self):
+        f, age = career_lint.age_finding(self.snap("2026-11-01T10-00-00Z"), self.TODAY)
+        self.assertEqual((f["status"], age), ("pass", 5))
+
+    def test_the_manifest_date_wins_over_the_directory_name(self):
+        d = self.snap(manifest={"captured_at": "2026-11-05T09:30:00+00:00"})
+        self.assertEqual(career_lint.age_finding(d, self.TODAY)[1], 1)
+
+    def test_an_undatable_snapshot_says_so_instead_of_passing(self):
+        f, age = career_lint.age_finding(self.snap("legacy"), self.TODAY)
+        self.assertEqual((f["status"], age), ("warn", None))
+
+    def test_a_stale_warning_never_fails_the_lint(self):
+        profile = self.root / "profile.yml"
+        profile.write_text("name: Jane\nheadline: Social Media Manager | Canva\n"
+                           "experience: []\neducation: []\n")
+        snap = make_snapshot(self.snap(), profile_text="Social Media Manager | Canva")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = career_lint.main([str(profile), str(snap), "--json"], today=self.TODAY)
+        data = json.loads(out.getvalue())
+        self.assertEqual((rc, data["failed"], data["snapshot_age_days"]), (0, 0, 79))
+        self.assertEqual(data["findings"][0]["check"], "snapshot age")
+
+    def test_a_variant_is_what_gets_linted_and_is_named(self):
+        profile = self.root / "profile.yml"
+        profile.write_text("name: Jane\nheadline: Social Media Manager | Canva\n"
+                           "experience: []\neducation: []\n")
+        variant = self.root / "acme.yml"
+        variant.write_text("headline: Head of Social | Canva\n")
+        snap = make_snapshot(self.snap(), profile_text="Social Media Manager | Canva")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = career_lint.main([str(profile), str(snap), "--variant", str(variant),
+                                   "--json"], today=self.TODAY)
+        data = json.loads(out.getvalue())
+        self.assertEqual((rc, data["variant"]), (1, "acme"))     # the variant's headline fails
+        self.assertIn("Head of Social", json.dumps(data["findings"]))
 
 
 if __name__ == "__main__":

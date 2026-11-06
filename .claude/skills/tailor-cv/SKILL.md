@@ -102,6 +102,9 @@ private: never name a client in a file that gets committed.
    End with a **verdict**, one of: `rejected` (cut again), `submittable`, or
    `submittable with confirmations` followed by every phrasing that rests on
    inference rather than a stated fact, for the client to confirm before sending.
+   Record it with `bin/career cv verdict v<N> <rejected|submittable|confirm>
+   [--note "..."] -c <client>` once the cut is frozen (see "Freeze it"), so
+   `VERSIONS.md` and `REVIEW.md` agree.
    The two reviews are not interchangeable: a draft passes grounding and still
    fails here, and this pass never overrides a grounding finding.
 9. **Show the PDF**, the missing-keyword list and both reviews to Denys. Iterate on
@@ -122,14 +125,28 @@ private: never name a client in a file that gets committed.
   freezes the cut as `applications/<company>/<vacancy-id>-<title>/v<N>/` with a
   `REVIEW.md` skeleton. The grounding findings, the credibility read and the verdict
   from steps 7 and 8 are what go into it, so the verdict exists before the client
-  reads the PDF. Never edit a `v<N>/` afterwards, cut the next one.
+  reads the PDF. Never edit a `v<N>/` afterwards, cut the next one; the one
+  exception is the verdict, which `bin/career cv verdict` writes into both
+  `REVIEW.md` and `VERSIONS.md`.
+- **Interview prep**: `bin/career cv prep <jd-snapshot> <name> -c <client>` returns a
+  story per CV claim (the claim quoted, the telling left as `[YOU: ...]` slots for the
+  client), the posting terms the CV lacks, the frozen cut's review points as the places
+  an interviewer can press, and questions to ask. Like the letter pack it gathers and
+  invents nothing; the client fills the slots from what they really did, and a slot they
+  cannot fill truthfully marks a bullet to soften or cut.
 - **Record it**: `bin/career apply add <jd-snapshot> --variant <name> --version v<N> -c <client>` once
   the application is actually sent. Only record what was really submitted - a ledger
-  that invents history is worse than no ledger.
+  that invents history is worse than no ledger. A cut that is prepared but not sent is
+  recorded with `--status drafted` (no date, never chased), and a withdrawn application
+  is `apply set <id> --status withdrawn`.
 - **Chase it**: `bin/career apply followup -c <client>`.
 - If a verb fails oddly, `bin/career doctor -c <client>` says what is missing.
 
 ## Rules
+- **A client's forbidden claims are a build gate.** If `clients/<client>/forbidden_claims.yml`
+  exists, a build whose CV contains a listed phrase fails naming it. Add a phrase there
+  the moment a review finds a claim the facts cannot back, so no later cut repeats it;
+  never reword around the list to keep the claim.
 - Truth over keyword-matching. Every claim must survive a technical interview and
   a real work-trial. Stretch framing is fine; fabrication is not.
 - Credibility over coverage. A true, keyword-dense CV that reads as a costume

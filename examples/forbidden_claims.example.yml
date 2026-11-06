@@ -1,0 +1,15 @@
+# EXAMPLE forbidden_claims.yml - fabricated. Copy to
+# ../clients/<name>/forbidden_claims.yml (the clients/ tree is gitignored).
+#
+# Phrases this client must never claim. `career cv build` (and so `cv version`)
+# fails, naming the phrase and the text it was found in, if the CV makes one.
+# Matching is on the words, not the spelling: case, hyphens and spacing do not
+# matter, and a phrase also matches inside longer words ("least privilege"
+# catches "least-privileged"). A bare string is enough; a reason is for the
+# next person who wonders why the build refused.
+forbidden:
+  - least-privilege
+  - phrase: every operation is audited
+    reason: the service keeps a log of admin actions, not a guarantee for all of them
+  - phrase: built the platform
+    reason: one team member among several; say what part

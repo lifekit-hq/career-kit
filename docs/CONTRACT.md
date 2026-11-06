@@ -16,7 +16,7 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
 
   | Lane | Verbs (implemented) | Verbs (planned) |
   |------|---------------------|-----------------|
-  | `cv` | `build`, `ats`, `match`, `lint`, `letter`, `version` | - |
+  | `cv` | `build`, `ats`, `match`, `lint`, `letter`, `version`, `verdict`, `prep` | - |
   | `linkedin` | `capture`, `diff`, `audit`, `jd`, `keywords`, `benchmark` | - |
   | `apply` | `add`, `list`, `set`, `followup` | - |
   | `jd` | `add` | - |
@@ -51,6 +51,37 @@ career <lane> <verb> [args] [-c|--client <name>] [--json]
   `REVIEW.md` skeleton), appending a row to that application's `VERSIONS.md`.
   A `v<N>/` is never written twice; a build that is not one page is refused
   (exit 1). `apply add --version v<N>` records which frozen cut was sent.
+- **verdict** - `cv verdict v<N> <rejected|submittable|confirm>` records the
+  review's verdict on a frozen cut in both places it lives, the row in
+  `VERSIONS.md` and the `Verdict:` line of `v<N>/REVIEW.md`, in one step so
+  they cannot disagree (`confirm` is stored as "submittable with
+  confirmations"; `--note` writes the confirmations under it). The application
+  is named with `--jd <snapshot>` or `--app <company/vacancy-dir>`, or implied
+  when only one holds that `v<N>`. A later verdict replaces an earlier one;
+  nothing else in a frozen `v<N>/` is touched.
+- **prep** - `cv prep <jd-snapshot> [variant]` assembles an interview-prep pack
+  and invents nothing: a story per CV claim (the claim verbatim, `[YOU: ...]`
+  slots for the telling), the posting's requirement terms the built CV lacks,
+  the latest frozen cut's `REVIEW.md` points (or `--version v<N>`), and
+  questions to ask seeded from the posting's requirement terms. The variant
+  must be built first.
+- **lint** - `cv lint [variant]` checks the merged CV (profile plus that
+  variant; a named variant with no file is a usage error) against the latest
+  profile snapshot, and warns - never fails - when the snapshot is more than
+  30 days old or cannot be dated.
+- **forbidden claims** - an optional `clients/<c>/forbidden_claims.yml` lists
+  phrases the client must never claim (`examples/forbidden_claims.example.yml`).
+  A build whose CV text holds one fails, naming the phrase, its reason and the
+  text it was found in; `cv version` builds first, so no cut is frozen with
+  one. The match is on the words, not the spelling, and also inside longer words.
+- **application status** - a ledger row is `drafted` (prepared, not sent: no
+  applied or follow-up date, never chased), then `sent`, `replied`,
+  `interview`, and ends `rejected`, `ghosted` or `withdrawn`. `apply add
+  --status drafted|sent` chooses where a row starts; `apply set --status sent`
+  on a draft dates it today. Only the open statuses (`sent`, `replied`,
+  `interview`) are ever due to chase. Recording a role whose company and
+  normalised title already sit in the ledger under another id succeeds with a
+  `warnings` entry naming that row; only a human can say they are one job.
 - **application id** - a ledger row (`apply` lane) is keyed by the posting's
   own vacancy id, read from the capture (`jobId`); a capture without one needs
   an explicit `--id`, and the same id twice is a usage error unless `--reapply`

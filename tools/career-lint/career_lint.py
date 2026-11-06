@@ -12,11 +12,15 @@ The headline rule: the role noun (everything before the first '|') is fixed and
 must match LinkedIn; the modifiers after the pipe are per-variant framing, so a
 variant that overrides `headline` gets a warn for the tail, not a fail.
 
+A snapshot older than STALE_DAYS draws a warning (never a failure): the
+comparison is only as good as the capture, and LinkedIn may have moved since.
+
 Exit codes: 0 = clean, 1 = findings (any fail), 2 = usage/operational error.
 """
 import json
 import re
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -29,6 +33,41 @@ SECTION_FILES = {
     "experience": ["raw/experience.txt", "experience.txt"],
     "education":  ["raw/education.txt", "education.txt"],
 }
+
+
+STALE_DAYS = 30
+
+
+def snapshot_date(snap: Path):
+    """When the capture was taken: the manifest's captured_at, else the
+    timestamp the store names the directory with (2026-08-19T14-50-08Z)."""
+    try:
+        at = json.loads((snap / "manifest.json").read_text(encoding="utf-8"))["captured_at"]
+        return datetime.fromisoformat(str(at).replace("Z", "+00:00")).date()
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    m = re.match(r"(\d{4}-\d{2}-\d{2})T", snap.name)
+    try:
+        return date.fromisoformat(m.group(1)) if m else None
+    except ValueError:
+        return None
+
+
+def age_finding(snap: Path, today: date):
+    """(finding, age in days or None). A fresh capture passes; an old one warns
+    with the command that fixes it; an undatable one says so rather than
+    implying it is fresh."""
+    taken = snapshot_date(snap)
+    if taken is None:
+        return ({"status": "warn", "check": "snapshot age",
+                 "detail": "cannot tell when this snapshot was captured"}, None)
+    age = (today - taken).days
+    if age > STALE_DAYS:
+        return ({"status": "warn", "check": "snapshot age",
+                 "detail": f"the LinkedIn snapshot is {age} days old (captured {taken}); "
+                           "re-run: career linkedin capture"}, age)
+    return ({"status": "pass", "check": "snapshot age",
+             "detail": f"captured {taken}, {age} day(s) ago"}, age)
 
 
 def norm(s):
@@ -165,24 +204,27 @@ def lint(cfg: dict, snap: dict, tailored: bool = False) -> list[dict]:
     return findings
 
 
-def to_markdown(findings, profile_path, snap_path):
+def to_markdown(findings, profile_path, snap_path, variant=None):
     icon = {"pass": "✓", "fail": "✗", "warn": "!"}
     fails = sum(1 for f in findings if f["status"] == "fail")
     out = ["# career lint - CV vs LinkedIn",
-           f"- CV: `{profile_path}`", f"- snapshot: `{snap_path}`",
+           f"- CV: `{profile_path}`" + (f" + variant `{variant}`" if variant else ""),
+           f"- snapshot: `{snap_path}`",
            f"- result: **{'CLEAN' if fails == 0 else f'{fails} MISMATCH(ES)'}**", ""]
     for f in findings:
         out.append(f"- {icon[f['status']]} **{f['check']}** - {f['detail']}")
     return "\n".join(out)
 
 
-def main(argv):
+def main(argv, today=None):
     as_json = "--json" in argv
     argv = [x for x in argv if x != "--json"]
     variant = {}
+    variant_name = None
     if "--variant" in argv:
         i = argv.index("--variant")
         try:
+            variant_name = Path(argv[i + 1]).stem
             variant = yaml.safe_load(Path(argv[i + 1]).read_text(encoding="utf-8")) or {}
         except (IndexError, OSError) as e:
             print(f"--variant: {e}", file=sys.stderr)
@@ -197,12 +239,15 @@ def main(argv):
         return 2
     cfg = merge(yaml.safe_load(profile_path.read_text(encoding="utf-8")), variant)
     findings = lint(cfg, load_snapshot(snap_path), tailored="headline" in (variant or {}))
+    stale, age = age_finding(snap_path, today or date.today())
+    findings.insert(0, stale)
     fails = sum(1 for f in findings if f["status"] == "fail")
     if as_json:
-        print(json.dumps({"cv": str(profile_path), "snapshot": str(snap_path),
+        print(json.dumps({"cv": str(profile_path), "variant": variant_name,
+                          "snapshot": str(snap_path), "snapshot_age_days": age,
                           "failed": fails, "findings": findings}))
     else:
-        print(to_markdown(findings, profile_path, snap_path))
+        print(to_markdown(findings, profile_path, snap_path, variant_name))
     return 1 if fails else 0
 
 

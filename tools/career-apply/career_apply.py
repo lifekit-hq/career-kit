@@ -1,6 +1,6 @@
 """career apply - the application ledger.
 
-    python3 career_apply.py add  <client-dir> <jd-snapshot> [--variant V] [--version vN] [--id X] [--reapply] ...
+    python3 career_apply.py add  <client-dir> <jd-snapshot> [--status drafted|sent] [--variant V] [--version vN] [--id X] [--reapply] ...
     python3 career_apply.py list <client-dir> [--status S] [--json]
     python3 career_apply.py set  <client-dir> <id> [--status S] [--followup D] ...
     python3 career_apply.py followup <client-dir> [--on DATE] [--json]
@@ -30,10 +30,19 @@ import yaml
 SCHEMA = "career-apply/1"
 LEDGER = "applications.yml"
 
-# The lifecycle a sent application can be in. `ghosted` is a real terminal
-# state, not a missing value - naming it keeps it out of the follow-up queue.
-STATUSES = ("sent", "replied", "interview", "rejected", "ghosted")
+# The lifecycle of an application. `drafted` is prepared-not-sent: the row
+# exists so the hunt has one place to look, but nothing has gone out, so there
+# is no applied date and nothing to chase. `ghosted` and `withdrawn` are real
+# terminal states, not missing values - naming them keeps them out of the
+# follow-up queue and says why the thread ended (they dropped us / we left).
+STATUSES = ("drafted", "sent", "replied", "interview", "rejected", "ghosted",
+            "withdrawn")
 OPEN_STATUSES = ("sent", "replied", "interview")
+# What `add` can start a row as: prepared, or actually submitted.
+ADD_STATUSES = ("drafted", "sent")
+# No follow-up date is carried by these: drafted has not been sent, the rest
+# are over.
+NO_FOLLOWUP_STATUSES = ("drafted", "rejected", "ghosted", "withdrawn")
 
 FOLLOWUP_DAYS = 7
 
@@ -104,6 +113,45 @@ def row_id(apps: list, job: dict, explicit, reapply: bool) -> str:
     return f"{base}-{n}"
 
 
+_COMPANY_SUFFIX = {"inc", "ltd", "llc", "gmbh", "plc", "corp", "corporation",
+                   "limited", "co", "company", "sa", "bv", "ag"}
+_TITLE_ALIASES = {"sr": "senior", "jr": "junior", "eng": "engineer",
+                  "engineering": "engineer", "dev": "developer"}
+
+
+def _words(s) -> list:
+    return re.sub(r"[^a-z0-9]+", " ", str(s or "").lower().replace("&", " and ")
+                  ).split()
+
+
+def norm_company(s) -> str:
+    """Case, punctuation and legal-form suffixes ("Inc.", "Ltd") are not what
+    tells two employers apart."""
+    return " ".join(w for w in _words(s) if w not in _COMPANY_SUFFIX)
+
+
+def norm_title(s) -> str:
+    """A parenthetical is a team or a location, not the role; "Sr." is
+    "Senior". Anything subtler is a human judgement, so it stays a warning."""
+    return " ".join(_TITLE_ALIASES.get(w, w)
+                    for w in _words(re.sub(r"\([^)]*\)", " ", str(s or ""))))
+
+
+def duplicates_of(apps: list, job: dict, new_id: str) -> list:
+    """Rows for the same company and role under a different id - the same job
+    posted on LinkedIn and on the company's own board has two vacancy ids, and
+    the id check alone cannot see that. A re-application's suffixed id is the
+    same posting, which `--reapply` already declared on purpose."""
+    company, title = norm_company(job.get("company")), norm_title(job.get("title"))
+    if not (company and title):
+        return []
+    base = re.sub(r"-\d+$", "", new_id)
+    return [a for a in apps
+            if re.sub(r"-\d+$", "", str(a.get("id"))) != base
+            and norm_company(a.get("company")) == company
+            and norm_title(a.get("role")) == title]
+
+
 def read_job(snap: Path) -> dict:
     """Company/role/source straight from the capture, so the ledger cannot
     disagree with the evidence it points at."""
@@ -160,8 +208,19 @@ def cmd_add(args) -> dict:
         raise Usage(f"{snap} has no readable job.json - is it a job capture? "
                     "(career linkedin jd <url>)")
 
-    applied = parse_date(args.applied, "applied") if args.applied else args.today
-    followup = (parse_date(args.followup, "followup") if args.followup else
+    if args.status not in ADD_STATUSES:
+        raise Usage(f"--status for add is one of {', '.join(ADD_STATUSES)}; "
+                    "record later states with: career apply set")
+    drafted = args.status == "drafted"
+    if drafted and (args.applied or args.followup):
+        raise Usage("a drafted application has not been sent: it has no applied "
+                    "or follow-up date (set --status sent when it goes out)")
+    # A draft is not an application date: leave it empty rather than write a
+    # date for something that has not happened.
+    applied = (None if drafted else
+               parse_date(args.applied, "applied") if args.applied else args.today)
+    followup = (None if drafted else
+                parse_date(args.followup, "followup") if args.followup else
                 (date.fromisoformat(applied) + timedelta(days=FOLLOWUP_DAYS)).isoformat())
 
     doc = load(client_dir)
@@ -180,13 +239,17 @@ def cmd_add(args) -> dict:
         "version": args.version,
         "applied": applied,
         "channel": args.channel,
-        "status": "sent",
+        "status": args.status,
         "followup": followup,
         "notes": args.notes or "",
     }
+    warnings = [f"{a['id']} already records {a.get('company')} - {a.get('role')} "
+                f"(status {a.get('status')}); is {entry['id']} the same role under "
+                "another id? see: career apply list"
+                for a in duplicates_of(doc["applications"], job, entry["id"])]
     doc["applications"].append(entry)
     save(client_dir, doc)
-    return {"added": entry, "count": len(doc["applications"])}
+    return {"added": entry, "count": len(doc["applications"]), "warnings": warnings}
 
 
 def cmd_list(args) -> dict:
@@ -214,9 +277,10 @@ def cmd_set(args) -> dict:
         if args.status not in STATUSES:
             raise Usage(f"unknown status {args.status!r}; one of {', '.join(STATUSES)}")
         entry["status"] = args.status
-        # A terminal state has nothing left to chase; leaving a date behind
-        # would keep it surfacing in the follow-up queue forever.
-        if args.status in ("rejected", "ghosted"):
+        # A terminal state has nothing left to chase (and a draft has nothing
+        # sent to chase yet); leaving a date behind would keep it surfacing in
+        # the follow-up queue forever.
+        if args.status in NO_FOLLOWUP_STATUSES:
             entry["followup"] = None
         elif not entry.get("followup"):
             # ...and reopening one has to give the date back, or the
@@ -224,6 +288,10 @@ def cmd_set(args) -> dict:
             # forever - the exact lost thread this ledger exists to prevent.
             entry["followup"] = (date.fromisoformat(args.today)
                                  + timedelta(days=FOLLOWUP_DAYS)).isoformat()
+        # Going out is what dates an application: a draft that is now sent was
+        # applied today, not on the day it was prepared.
+        if args.status in OPEN_STATUSES and not entry.get("applied"):
+            entry["applied"] = args.today
     if args.notes is not None:
         entry["notes"] = args.notes
     if args.chased is not None:
@@ -261,10 +329,13 @@ def cmd_followup(args) -> dict:
 def render(verb: str, data: dict) -> str:
     if verb == "add":
         e = data["added"]
+        when = (f"applied {e['applied']} · follow up {e['followup']}"
+                if e.get("applied") else "drafted, not sent")
         return (f"→ {e['id']}  {e['company']} - {e['role']}\n"
                 f"  variant {e['variant'] or '(none)'}"
                 + (f" {e['version']}" if e.get('version') else "")
-                + f" · applied {e['applied']} · follow up {e['followup']}")
+                + f" · {when}"
+                + "".join(f"\n  warning: {w}" for w in data.get("warnings", [])))
     if verb == "set":
         e = data["updated"]
         return f"→ {e['id']}  status {e['status']} · follow up {e['followup'] or '-'}"
@@ -281,7 +352,7 @@ def render(verb: str, data: dict) -> str:
     apps = data["applications"]
     if not apps:
         return "no applications recorded"
-    rows = [f"  {a['id']}  {a.get('status',''):<9} {a.get('applied',''):<11} "
+    rows = [f"  {a['id']}  {a.get('status') or '':<9} {a.get('applied') or '-':<11} "
             f"{(a.get('company') or '?')} - {(a.get('role') or '?')}"
             + (f"  [{a['version']}]" if a.get("version") else "")
             + (f"  · quiet {a['days_quiet']}d" if a.get("days_quiet") is not None
@@ -308,6 +379,8 @@ def main(argv=None, today=None):
     a.add_argument("--version", help="the frozen cut that was sent (career cv version), e.g. v2")
     a.add_argument("--reapply", action="store_true",
                    help="record a genuine second application to the same posting")
+    a.add_argument("--status", default="sent",
+                   help="drafted (prepared, not sent) or sent (default)")
     a.add_argument("--applied"); a.add_argument("--followup"); a.add_argument("--notes")
 
     l = sub.add_parser("list", parents=[common]); l.set_defaults(fn=cmd_list)

@@ -56,7 +56,7 @@ bin/career doctor                            # preflight: what's installed, what
 bin/career cv build openai                   # merge + render -> build/<client>/openai/..._CV.pdf
 bin/career cv ats   openai                   # the text an ATS parser sees (RenderCV .md)
 bin/career cv match openai jd.txt            # JD keywords missing from the CV
-bin/career cv lint  openai                   # cross-check the CV against the LinkedIn snapshot
+bin/career cv lint  openai                   # cross-check the CV (that variant) against the LinkedIn snapshot; warns when it is stale
 
 bin/career linkedin capture <profile-url>    # snapshot a profile into the capture store
 bin/career linkedin jd <jobs-url>            # snapshot a job post
@@ -67,7 +67,10 @@ bin/career linkedin audit                    # rubric-score the latest profile s
 
 bin/career cv letter <jd-snapshot> openai    # grounded input pack for a cover letter
 bin/career cv version openai <jd-snapshot>   # build + freeze the cut as applications/<company>/<vacancy-id>-<title>/v<N>/
+bin/career cv verdict v1 submittable         # record the review verdict in VERSIONS.md and REVIEW.md at once (rejected|submittable|confirm)
+bin/career cv prep <jd-snapshot> openai      # interview-prep pack: a story per CV claim, the gaps, questions to ask
 bin/career apply add <jd-snapshot> --variant openai --version v2   # record an application you sent (row id = the posting's vacancy id)
+bin/career apply add <jd-snapshot> --status drafted   # prepared, not sent: listed, never chased
 bin/career apply set <vacancy-id> --chased   # record a chase against that posting
 bin/career apply followup                    # what's due to chase
 ```

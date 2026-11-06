@@ -354,9 +354,14 @@ class LoadForbidden(unittest.TestCase):
     def test_a_forbidden_key_holding_the_list(self):
         self.assertEqual(len(self.load("forbidden:\n  - a claim\n")), 1)
 
-    def test_an_empty_file_or_list_is_no_list(self):
-        self.assertEqual(self.load(""), [])
-        self.assertEqual(self.load("forbidden:\n"), [])
+    def test_an_empty_list_is_no_list(self):
+        self.assertEqual(self.load("forbidden: []\n"), [])
+
+    def test_a_file_that_lists_nothing_or_mis_keys_it_is_refused(self):
+        for text in ("", "# only a comment\n", "forbidden:\n", "forbiden:\n  - a claim\n",
+                     "claims:\n  - a claim\n"):
+            with self.subTest(text=text), self.assertRaises(SystemExit):
+                self.load(text)
 
     def test_an_entry_that_would_match_everything_is_refused(self):
         for text in ("- ''\n", "- '--'\n", "- {reason: x}\n", "- 5\n"):

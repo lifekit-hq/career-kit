@@ -91,14 +91,22 @@ class Record(Base):
         self.assertIn(f"| v2 | {TODAY} | acme | rejected |", versions)
         self.assertIn("Verdict: \n", (self.app / "v1" / "REVIEW.md").read_text())
 
-    def test_a_later_verdict_replaces_the_earlier_one_and_its_note(self):
+    def test_a_later_verdict_replaces_the_line_and_keeps_the_confirmations(self):
         self.freeze()
         self.verdict("v1", "confirm", "--note", "Confirm the first thing.")
         self.verdict("v1", "submittable")
         review = (self.app / "v1" / "REVIEW.md").read_text()
         self.assertEqual(review.count("Verdict:"), 1)
-        self.assertNotIn("Confirm the first thing", review)
+        self.assertIn("Verdict: submittable\n", review)
+        self.assertIn("Confirm the first thing.", review)
         self.assertIn("| submittable |", (self.app / "VERSIONS.md").read_text())
+
+    def test_re_recording_with_the_same_note_does_not_duplicate_it(self):
+        self.freeze()
+        self.verdict("v1", "confirm", "--note", "Confirm the first thing.")
+        self.verdict("v1", "confirm", "--note", "Confirm the first thing.")
+        self.assertEqual((self.app / "v1" / "REVIEW.md").read_text()
+                         .count("Confirm the first thing."), 1)
 
     def test_frozen_artifacts_are_not_touched(self):
         self.freeze()

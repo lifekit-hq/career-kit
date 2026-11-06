@@ -92,9 +92,14 @@ def load_forbidden(cdir: Path) -> list:
     if not path.is_file():
         return []
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    entries = doc.get("forbidden") if isinstance(doc, dict) else doc
-    if entries is None:
-        return []
+    if isinstance(doc, dict):
+        if "forbidden" not in doc:
+            raise SystemExit(f"{path}: a mapping needs a `forbidden:` key "
+                             f"holding the list, got {sorted(doc)}")
+        doc = doc["forbidden"]
+    if doc is None:
+        raise SystemExit(f"{path}: no phrases listed; add some or delete the file")
+    entries = doc
     if not isinstance(entries, list):
         raise SystemExit(f"{path}: expected a list of phrases (or `forbidden:` "
                          "holding one)")

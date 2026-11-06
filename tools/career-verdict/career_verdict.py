@@ -60,11 +60,21 @@ def find_application(client_dir: Path, version: str, jd, explicit_id, app) -> Pa
 
 
 def set_review_verdict(text: str, verdict: str, note) -> str:
-    """Replace everything under `## Verdict` (the skeleton's empty line, or an
-    earlier verdict) with the new one. A review with no such heading gets it."""
-    body = f"{VERDICT_HEADING}\n\nVerdict: {verdict}\n" + (f"\n{note.strip()}\n" if note else "")
+    """Set the `Verdict:` line under `## Verdict`, keeping everything else there
+    (the reviewer's confirmations, an earlier note). A review with no such
+    heading gets it. A note is added unless it is already in the review."""
+    line = f"Verdict: {verdict}"
     i = text.find(VERDICT_HEADING)
-    return (text[:i] if i >= 0 else text.rstrip("\n") + "\n\n") + body
+    if i < 0:
+        text = text.rstrip("\n") + f"\n\n{VERDICT_HEADING}\n\n{line}\n"
+    else:
+        head, tail = text[:i + len(VERDICT_HEADING)], text[i + len(VERDICT_HEADING):]
+        tail, n = re.subn(r"(?m)^Verdict:.*$", line, tail, count=1)
+        text = head + (tail if n else f"\n\n{line}{tail}")
+    note = note.strip() if note else ""
+    if note and note not in text:
+        text = text.rstrip("\n") + f"\n\n{note}\n"
+    return text
 
 
 def set_versions_verdict(text: str, version: str, verdict: str) -> str:
